@@ -6,6 +6,8 @@ import Dashboard from "./pages/Dashboard";
 import Collections from "./pages/Collections";
 import Reports from "./pages/Reports";
 import AdminUpload from "./pages/AdminUpload";
+import ChangePassword from "./pages/ChangePassword";
+import Security from "./pages/Security";
 
 // Layout & Guard
 import AppLayout from "./components/layout/AppLayout";
@@ -25,6 +27,8 @@ return (
         <Route path="/collections" element={<Collections />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/admin-upload" element={<AdminUpload />} />
+        <Route path="/security" element={<Security />} />     
+        <Route path="/change-password" element={<ChangePassword />} /> 
       </Route>
     </Route>
 

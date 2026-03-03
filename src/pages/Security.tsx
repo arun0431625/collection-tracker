@@ -1,11 +1,8 @@
-// 🔥 FINAL UPDATED SECURITY PAGE (NO LOGIC CHANGED)
-
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { useBranch } from "@/context/BranchContext";
+import { supabase } from "../lib/supabase";
+import { useBranch } from "../context/BranchContext";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
-import { Eye, EyeOff } from "lucide-react";
 
 type UserRow = {
   id: string;
@@ -21,10 +18,7 @@ export default function Security() {
 
   const [rows, setRows] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newPasswords, setNewPasswords] = useState<Record<string, string>>({});
-  const [savedTick, setSavedTick] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
-  const [showPwd, setShowPwd] = useState<Record<string, boolean>>({});
   const [deleteSearch, setDeleteSearch] = useState("");          // branch search input
   const [deleteSummary, setDeleteSummary] = useState<{
     branch: string;
@@ -39,61 +33,30 @@ export default function Security() {
   const activeCount = rows.filter((r) => r.is_active).length;
   const disabledCount = rows.filter((r) => !r.is_active).length;
 
-  useEffect(() => {
-    if (role !== "ADMIN") return;
+useEffect(() => {
+  if (role !== "ADMIN") return;
 
-    async function fetchUsers() {
-      setLoading(true);
+  async function fetchBranches() {
+    setLoading(true);
 
-      await supabase.rpc("sync_branch_users");
+    const { data, error } = await supabase
+      .from("branches")
+      .select("*")
+      .order("branch_code");
 
-      const { data } = await supabase
-        .from("branch_users")
-        .select(
-          "id, branch_code, area_manager, username, is_active, password_changed_at"
-        )
-        .order("branch_code");
+    console.log("Branches:", data);
+    console.log("Error:", error);
 
-      setRows(data || []);
-      setLoading(false);
+    if (!error && data) {
+      setRows(data);
     }
 
-    fetchUsers();
-  }, [role]);
-
-  async function savePassword(user: UserRow) {
-    const pwd = newPasswords[user.id];
-    if (!pwd) {
-      alert("Enter a password first");
-      return;
-    }
-
-    const { error } = await supabase.rpc("set_user_password", {
-      p_user_id: user.id,
-      p_password: pwd,
-    });
-
-    if (error) {
-      alert("Save failed");
-      console.error(error);
-    } else {
-      setSavedTick((prev) => ({ ...prev, [user.id]: true }));
-
-      setTimeout(() => {
-        setSavedTick((prev) => ({ ...prev, [user.id]: false }));
-      }, 1500);
-
-      setNewPasswords((prev) => ({ ...prev, [user.id]: "" }));
-
-      setRows((prev) =>
-        prev.map((r) =>
-          r.id === user.id
-            ? { ...r, password_changed_at: new Date().toISOString() }
-            : r
-        )
-      );
-    }
+    setLoading(false);
   }
+
+  fetchBranches();
+}, [role]);
+
 async function checkBranchData(branch: string) {
   if (!branch) return;
   // count LRs
@@ -143,14 +106,14 @@ async function deleteBranch(branch: string) {
   // 1. delete LRs
   await supabase.from("collections_lrs").delete().eq("branch_code", branch.toUpperCase());
   // 2. delete branch user
-  await supabase.from("branch_users").delete().eq("branch_code", branch.toUpperCase());
+  await supabase.from("branches").delete().eq("branch_code", branch.toUpperCase());
 
   alert("Branch & its LRs deleted successfully");
   setDeleteSummary(null);
   setDeleteSearch("");
   // refresh table
   const { data } = await supabase
-    .from("branch_users")
+    .from("branches")
     .select("*")
     .order("branch_code");
   setRows(data || [])
@@ -160,7 +123,7 @@ setBranchOptions(uniqueBranches);
 }
   async function toggleActive(branch_code: string, newValue: boolean) {
     const { error } = await supabase
-      .from("branch_users")
+      .from("branches")
       .update({ is_active: newValue })
       .eq("branch_code", branch_code);
 
@@ -177,6 +140,38 @@ setBranchOptions(uniqueBranches);
     );
   }
 
+  async function handleReset(branchCode: string) {
+    if (branchCode === "ADMIN") {
+      alert("Admin password cannot be reset from here");
+      return;
+    }
+
+    const confirmReset = window.confirm(
+      `Reset password for ${branchCode}?\n\nPassword will be set to Branch@123`
+    );
+
+    if (!confirmReset) return;
+
+    const { error } = await supabase.rpc(
+      "admin_reset_branch_password",
+      { p_branch_code: branchCode }
+    );
+
+    if (error) {
+      alert("Reset failed");
+      console.error(error);
+    } else {
+      alert("Password reset successful");
+
+      setRows((prev) =>
+        prev.map((r) =>
+          r.branch_code === branchCode
+            ? { ...r, password_changed_at: null }
+            : r
+        )
+      );
+    }
+  }
   function getDisplayPassword(u: UserRow) {
     const defaultPwd = u.branch_code.slice(0, 3).toUpperCase() + "ATC";
     if (u.password_changed_at) return "******** (custom set)";
@@ -190,7 +185,7 @@ setBranchOptions(uniqueBranches);
     return (
       u.branch_code.toLowerCase().includes(q) ||
       u.area_manager.toLowerCase().includes(q) ||
-      u.username.toLowerCase().includes(q)
+      u.branch_code.toLowerCase().includes(q)
     );
   });
 
@@ -198,7 +193,7 @@ setBranchOptions(uniqueBranches);
     const data = rows.map((u) => ({
       Branch: u.branch_code,
       Area_Manager: u.area_manager,
-      Username: u.username,
+      Username: u.branch_code,
       Status: u.is_active ? "Active" : "Disabled",
       Default_Password: getDisplayPassword(u),
     }));
@@ -225,7 +220,7 @@ setBranchOptions(uniqueBranches);
   }
 
   return (
-    <div className="p-6 space-y-6">
+      <div className="p-8 space-y-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">      
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -361,100 +356,79 @@ setBranchOptions(uniqueBranches);
   </div>
 )}
       {/* Table */}
-      <div className="rounded border bg-white overflow-auto">
+        <div className="bg-white/80 backdrop-blur rounded-xl shadow-lg border border-slate-200 overflow-hidden">
         <table className="min-w-full border-collapse text-sm">
-          <thead className="bg-gray-100">
+          <thead className="bg-slate-50">
             <tr>
-              <th className="border px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">
+              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 tracking-wide uppercase">
                 Branch
               </th>
-              <th className="border px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">
+              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 tracking-wide uppercase">
                 Area Manager
               </th>
-              <th className="border px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">
+              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 tracking-wide uppercase">
                 Username
               </th>
               <th className="border px-2 py-1 text-center">Status</th>
               <th className="border px-2 py-1 text-center">Action</th>
-              <th className="border px-2 py-1 text-center">New Password</th>
-              <th className="border px-2 py-1 text-center">Save</th>
             </tr>
           </thead>
 
           <tbody>
             {filteredRows.map((u) => (
-              <tr key={u.id} className="hover:bg-gray-50">
-                <td className="border px-3 py-2">{u.branch_code}</td>
-                <td className="border px-3 py-2">{u.area_manager}</td>
-                <td className="border px-3 py-2">
-                  {u.username}
+              <tr key={u.id} className="border-t border-slate-100 hover:bg-slate-50 transition-all duration-200">
+                <td className="px-4 py-3">{u.branch_code}</td>
+                <td className="px-4 py-3">{u.area_manager}</td>
+                <td className="px-4 py-3">
+                  {u.branch_code}
                   <div className="text-[10px] text-gray-400">
                     Default: {getDisplayPassword(u)}
                   </div>
                 </td>
 
-                <td className="border px-2 py-1 text-center">
-                  {u.is_active ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-3 py-1 text-xs font-medium text-green-700 ring-1 ring-green-200">
-                      ● Active
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-700 ring-1 ring-red-200">
-                      ● Disabled
-                    </span>
-                  )}
-                </td>
+                <td className="px-4 py-3 text-center">
+              <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${
+                u.is_active
+                  ? "bg-emerald-50 text-emerald-700"
+                  : "bg-rose-50 text-rose-700"
+              }`}>
+                <span className={`h-2 w-2 rounded-full ${
+                  u.is_active ? "bg-emerald-500" : "bg-rose-500"
+                }`} />
+                {u.is_active ? "Active" : "Disabled"}
+              </span>
+              </td>
 
-                <td className="border px-3 py-2 text-center">
-                  {u.is_active ? (
-                    <button
-                      onClick={() =>
-                        toggleActive(u.branch_code, false)
-                      }
-                      className="rounded border border-red-400 px-3 py-1 text-xs text-red-700 hover:bg-red-50"
-                    >
-                      Disable
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() =>
-                        toggleActive(u.branch_code, true)
-                      }
-                      className="rounded border border-green-400 px-3 py-1 text-xs text-green-700 hover:bg-green-50"
-                    >
-                      Enable
-                    </button>
-                  )}
-                </td>
+          <td className="px-4 py-3">
+            <div className="flex items-center gap-2">
 
-                <td className="border px-3 py-2">
-                  <input
-                    type="password"
-                    className="rounded border px-2 py-1 w-full"
-                    value={newPasswords[u.id] || ""}
-                    onChange={(e) =>
-                      setNewPasswords((prev) => ({
-                        ...prev,
-                        [u.id]: e.target.value,
-                      }))
-                    }
-                  />
-                </td>
+              {u.is_active ? (
+                <button
+                  onClick={() => toggleActive(u.branch_code, false)}
+                  className="rounded-lg border border-rose-300 px-3 py-1 text-xs text-rose-600 hover:bg-rose-50 transition"
+                >
+                  Disable
+                </button>
+              ) : (
+                <button
+                  onClick={() => toggleActive(u.branch_code, true)}
+                  className="rounded-lg border border-emerald-300 px-3 py-1 text-xs text-emerald-600 hover:bg-emerald-50 transition"
+                >
+                  Enable
+                </button>
+              )}
 
-                <td className="border px-2 py-1 text-center">
-                  <button
-                    onClick={() => savePassword(u)}
-                    className="rounded bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700"
-                  >
-                    Save
-                  </button>
+              {u.branch_code !== "ADMIN" && (
+                <button
+                  onClick={() => handleReset(u.branch_code)}
+                  className="rounded-lg bg-slate-800 px-3 py-1 text-xs text-white hover:bg-slate-900 transition shadow-sm"
+                >
+                  Reset
+                </button>
+              )}
 
-                  {savedTick[u.id] && (
-                    <div className="text-[10px] text-green-600 mt-1">
-                      Saved ✓
-                    </div>
-                  )}
-                </td>
+            </div>
+          </td>
               </tr>
             ))}
           </tbody>

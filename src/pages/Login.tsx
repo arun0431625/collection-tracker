@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import bcrypt from "bcryptjs";
-import { supabase } from "@/lib/supabaseClient";
-import { useBranch } from "@/context/BranchContext";
+import { supabase } from "../lib/supabaseClient";
+import { useBranch } from "../context/BranchContext";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -19,7 +19,7 @@ export default function Login() {
 
     const { data, error } = await supabase
       .from("branches")
-      .select("*")
+      .select("branch_code, branch_name, area_manager, password_hash, role, must_change_password, is_active")
       .eq("branch_code", uname)
       .eq("is_active", true)
       .single();
@@ -36,14 +36,20 @@ export default function Login() {
       return;
     }
 
-    // ✅ LOGIN SUCCESS
+    console.log("LOGIN DATA:", data);
+
+        // ✅ LOGIN SUCCESS
     setBranchContext({
       branch: data.branch_code,
       role: data.role,
       username: data.branch_code,
+      must_change_password: data.must_change_password,
     });
-
-    navigate("/dashboard", { replace: true });
+    if (data.must_change_password) {
+      navigate("/change-password", { replace: true });
+    } else {
+      navigate("/dashboard", { replace: true });
+    }
   }
 
   return (

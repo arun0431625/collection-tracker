@@ -1,7 +1,7 @@
 import { useState } from "react";
 import * as XLSX from "xlsx";
-import { supabase } from "@/lib/supabaseClient";
-import { useBranch } from "@/context/BranchContext";
+import { supabase } from "../lib/supabaseClient";
+import { useBranch } from "../context/BranchContext";
 
 /* ================= HELPERS ================= */
 

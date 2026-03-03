@@ -1,15 +1,18 @@
 import { createContext, useContext, useState } from "react";
 
+
 type BranchSession = {
   branch: string;
   role: "BRANCH" | "ADMIN";
   username: string;
+  must_change_password: boolean;
 };
 
 type Ctx = {
   branch: string | null;
   role: "BRANCH" | "ADMIN" | null;
   username: string | null;
+  must_change_password: boolean | null;
   setBranchContext: (v: BranchSession) => void;
   logout: () => void;
 };
@@ -38,6 +41,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
         branch: session?.branch ?? null,
         role: session?.role ?? null,
         username: session?.username ?? null,
+        must_change_password: session?.must_change_password ?? null,
         setBranchContext,
         logout,
       }}
