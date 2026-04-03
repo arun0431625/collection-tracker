@@ -43,7 +43,6 @@ collected_grs: number;
 total_freight: number;
 collected: number;
 balance: number;
-oldest_days: number;
 };
 
 type AreaRow = AreaManagerSummaryRow;
@@ -107,28 +106,57 @@ useEffect(() => {
 useEffect(() => {
   if (!branch) return;
 
-async function fetchReports() {
-  setLoading(true);
-  
-  let q = supabase
-    .from("collections_lrs")
-    .select(
-      "branch_code, area_manager, gr_date, total_freight, received_amount"
-    );
+  async function fetchReports() {
+    setLoading(true);
 
-  // 🔹 First branch filter
-  if (role !== "ADMIN") {
-    q = q.eq("branch_code", branch);
-  }
+    const branchParam = role === "ADMIN" ? null : branch;
+    const [resBranch, resArea, resAgeing] = await Promise.all([
+      supabase.rpc("get_reports_branch", { p_from_date: fromDate, p_to_date: toDate, p_branch_code: branchParam }),
+      supabase.rpc("get_reports_area", { p_from_date: fromDate, p_to_date: toDate, p_branch_code: branchParam }),
+      supabase.rpc("get_reports_ageing", { p_from_date: fromDate, p_to_date: toDate, p_branch_code: branchParam }),
+    ]);
 
-  // 🔹 Then date range
-  q = q
-    .gte("gr_date", fromDate)
-    .lte("gr_date", toDate);
+    if (!resBranch.error && !resArea.error && !resAgeing.error) {
+      const s1: MonthlyRow[] = (resBranch.data || []).map((r: any) => ({
+        month: `${fromDate} → ${toDate}`,
+        branch_code: r.branch_code,
+        total_grs: Number(r.total_grs),
+        collected_grs: Number(r.collected_grs),
+        total_freight: Number(r.total_freight),
+        collected: Number(r.collected),
+      }));
 
-    if (role !== "ADMIN") {
-      q = q.eq("branch_code", branch);
+      const s2: AgeingRow[] = (resAgeing.data || []).map((r: any) => ({
+        month: `${fromDate} → ${toDate}`,
+        branch_code: branch!,
+        bucket: r.bucket,
+        balance: Number(r.balance),
+      }));
+
+      const amSummary: AreaRow[] = (resArea.data || []).map((r: any) => ({
+        area_manager: r.area_manager,
+        totalGRs: Number(r.totalGRs),
+        collectedGRs: Number(r.collectedGRs),
+        totalFreight: Number(r.totalFreight),
+        collected: Number(r.collected),
+        balance: Number(r.totalFreight) - Number(r.collected),
+      }));
+
+      setSummaryRows(s1);
+      setAgeingRows(s2);
+      setAreaRows(amSummary);
+      setLoading(false);
+      return;
     }
+
+    console.warn("RPC missing, falling back to client-side grouping...");
+
+    let q = supabase
+      .from("collections_lrs")
+      .select("branch_code, area_manager, gr_date, total_freight, received_amount");
+
+    if (role !== "ADMIN") q = q.eq("branch_code", branch);
+    q = q.gte("gr_date", fromDate).lte("gr_date", toDate);
 
     let allRows: any[] = [];
     let from = 0;
@@ -145,105 +173,67 @@ async function fetchReports() {
 
     const rows = allRows;
 
-    // ===== SUMMARY MAP =====
     const summaryMap: Record<string, any> = {};
-
     rows.forEach((r) => {
       const b = r.branch_code;
       if (!summaryMap[b]) {
-        summaryMap[b] = {
-          total_grs: 0,
-          collected_grs: 0,
-          total_freight: 0,
-          collected: 0,
-        };
+        summaryMap[b] = { total_grs: 0, collected_grs: 0, total_freight: 0, collected: 0 };
       }
-
       const freight = r.total_freight || 0;
       const received = Math.min(r.received_amount || 0, freight);
 
       summaryMap[b].total_grs += 1;
-      if (received >= freight && freight > 0)
-        summaryMap[b].collected_grs += 1;
+      if (received >= freight && freight > 0) summaryMap[b].collected_grs += 1;
       summaryMap[b].total_freight += freight;
       summaryMap[b].collected += received;
     });
 
-    const s1: MonthlyRow[] = Object.entries(summaryMap).map(
-      ([branch_code, v]) => ({
-        month: `${fromDate} → ${toDate}`,
-        branch_code,
-        total_grs: v.total_grs,
-        collected_grs: v.collected_grs,
-        total_freight: v.total_freight,
-        collected: v.collected,
-      })
-    );
+    const s1: MonthlyRow[] = Object.entries(summaryMap).map(([branch_code, v]) => ({
+      month: `${fromDate} → ${toDate}`,
+      branch_code,
+      total_grs: v.total_grs,
+      collected_grs: v.collected_grs,
+      total_freight: v.total_freight,
+      collected: v.collected,
+    }));
 
-    // ===== AGEING =====
     const today = new Date();
     const bucketMap: Record<string, number> = {};
-
     rows.forEach((r) => {
-      const bal =
-        (r.total_freight || 0) -
-        Math.min(r.received_amount || 0, r.total_freight || 0);
-
+      const bal = (r.total_freight || 0) - Math.min(r.received_amount || 0, r.total_freight || 0);
       if (bal <= 0) return;
-
       const d = new Date(r.gr_date);
-      const days = Math.floor(
-        (today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24)
-      );
-
+      const days = Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
       let bucket = "0–30";
       if (days > 30 && days <= 60) bucket = "31–60";
       else if (days > 60 && days <= 90) bucket = "61–90";
       else if (days > 90) bucket = "90+";
-
       bucketMap[bucket] = (bucketMap[bucket] || 0) + bal;
     });
 
-    const s2: AgeingRow[] = Object.entries(bucketMap).map(
-      ([bucket, balance]) => ({
-        month: `${fromDate} → ${toDate}`,
-        branch_code: branch!,
-        bucket,
-        balance,
-      })
-    );
+    const s2: AgeingRow[] = Object.entries(bucketMap).map(([bucket, balance]) => ({
+      month: `${fromDate} → ${toDate}`,
+      branch_code: branch!,
+      bucket,
+      balance,
+    }));
 
-    // ===== AREA MANAGER =====
     const amMap: Record<string, any> = {};
-
     rows.forEach((r) => {
       const am = r.area_manager || "UNKNOWN";
-      if (!amMap[am]) {
-        amMap[am] = {
-          area_manager: am,
-          totalGRs: 0,
-          collectedGRs: 0,
-          totalFreight: 0,
-          collected: 0,
-        };
-      }
-
+      if (!amMap[am]) amMap[am] = { area_manager: am, totalGRs: 0, collectedGRs: 0, totalFreight: 0, collected: 0 };
       const freight = r.total_freight || 0;
       const received = Math.min(r.received_amount || 0, freight);
-
       amMap[am].totalGRs += 1;
-      if (received >= freight && freight > 0)
-        amMap[am].collectedGRs += 1;
+      if (received >= freight && freight > 0) amMap[am].collectedGRs += 1;
       amMap[am].totalFreight += freight;
       amMap[am].collected += received;
     });
 
-    const amSummary: AreaRow[] = Object.entries(amMap).map(
-      ([_, v]) => ({
-        ...v,
-        balance: v.totalFreight - v.collected,
-      })
-    );
+    const amSummary: AreaRow[] = Object.entries(amMap).map(([_, v]) => ({
+      ...v,
+      balance: v.totalFreight - v.collected,
+    }));
 
     setSummaryRows(s1);
     setAgeingRows(s2);
@@ -400,22 +390,10 @@ return (
 
     {/* KPI */}
     <div className="grid grid-cols-4 gap-3">
-      <div className="rounded bg-white border p-3">
-        <div className="text-xs text-gray-500">Total GRs</div>
-        <div className="text-lg font-semibold">{summary.totalGRs}</div>
-      </div>
-      <div className="rounded bg-white border p-3">
-        <div className="text-xs text-gray-500">Total Freight</div>
-        <div className="text-lg font-semibold">₹ {fmt(summary.totalFreight)}</div>
-      </div>
-      <div className="rounded bg-white border p-3">
-        <div className="text-xs text-gray-500">Collected</div>
-        <div className="text-lg font-semibold text-green-700">₹ {fmt(summary.collected)}</div>
-      </div>
-      <div className="rounded bg-white border p-3">
-        <div className="text-xs text-gray-500">Balance</div>
-        <div className="text-lg font-semibold text-red-700">₹ {fmt(summary.balance)}</div>
-      </div>
+      <Kpi label="Total LRs" value={summary.totalGRs} />
+      <Kpi label="Total Freight" value={`₹ ${fmt(summary.totalFreight)}`} />
+      <Kpi label="Collected" value={`₹ ${fmt(summary.collected)}`} green />
+      <Kpi label="Balance" value={`₹ ${fmt(summary.balance)}`} red />
     </div>
 
     {/* Branch-wise */}
@@ -430,79 +408,99 @@ return (
 
       {branchOpen && (
         <table className="min-w-full border-collapse text-sm">
-          <thead className="bg-gray-100">
-<tr>
-  <th className="border px-2 py-1 cursor-pointer" onClick={() =>
-    setBranchSort(s => ({
-      key: "branch_code",
-      dir: s?.key === "branch_code" && s.dir === "asc" ? "desc" : "asc",
-    }))
-  }>
-    Branch {branchSort?.key === "branch_code" ? (branchSort.dir === "asc" ? "▲" : "▼") : ""}
-  </th>
-
-  <th className="border px-2 py-1 cursor-pointer text-center" onClick={() =>
-    setBranchSort(s => ({
-      key: "total_grs",
-      dir: s?.key === "total_grs" && s.dir === "asc" ? "desc" : "asc",
-    }))
-  }>
-    Total LRs {branchSort?.key === "total_grs" ? (branchSort.dir === "asc" ? "▲" : "▼") : ""}
-  </th>
-
-  <th className="border px-2 py-1 cursor-pointer text-center" onClick={() =>
-    setBranchSort(s => ({
-      key: "collected_grs",
-      dir: s?.key === "collected_grs" && s.dir === "asc" ? "desc" : "asc",
-    }))
-  }>
-    Collected LRs {branchSort?.key === "collected_grs" ? (branchSort.dir === "asc" ? "▲" : "▼") : ""}
-  </th>
-
-<th
-  className="border px-2 py-1 cursor-pointer text-center"
-  onClick={() =>
-    setBranchSort(s => ({
-      key: "lr_pct",
-      dir: s?.key === "lr_pct" && s.dir === "asc" ? "desc" : "asc",
-    }))
-  }
->
-  LR % {branchSort?.key === "lr_pct" ? (branchSort.dir === "asc" ? "▲" : "▼") : ""}
-</th>
-
-
-  <th className="border px-2 py-1 cursor-pointer text-right" onClick={() =>
-    setBranchSort(s => ({
-      key: "total_freight",
-      dir: s?.key === "total_freight" && s.dir === "asc" ? "desc" : "asc",
-    }))
-  }>
-    Total Freight {branchSort?.key === "total_freight" ? (branchSort.dir === "asc" ? "▲" : "▼") : ""}
-  </th>
-
-<th
-  className="border px-2 py-1 cursor-pointer text-center"
-  onClick={() =>
-    setBranchSort(s => ({
-      key: "amt_pct",
-      dir: s?.key === "amt_pct" && s.dir === "asc" ? "desc" : "asc",
-    }))
-  }
->
-  Amount % {branchSort?.key === "amt_pct" ? (branchSort.dir === "asc" ? "▲" : "▼") : ""}
-</th>
-
-
-  <th className="border px-2 py-1 cursor-pointer text-right" onClick={() =>
-    setBranchSort(s => ({
-      key: "balance",
-      dir: s?.key === "balance" && s.dir === "asc" ? "desc" : "asc",
-    }))
-  }>
-    Balance {branchSort?.key === "balance" ? (branchSort.dir === "asc" ? "▲" : "▼") : ""}
-  </th>
-</tr>
+          <thead className="bg-gray-50">
+            <tr className="text-left">
+              <SortTH
+                label="Branch"
+                sortKey="branch_code"
+                activeKey={branchSort?.key || ""}
+                dir={branchSort?.dir || "asc"}
+                onClick={() =>
+                  setBranchSort(s => ({
+                    key: "branch_code",
+                    dir: s?.key === "branch_code" && s.dir === "asc" ? "desc" : "asc",
+                  }))
+                }
+              />
+              <SortTH
+                label="Total LRs"
+                sortKey="total_grs"
+                activeKey={branchSort?.key || ""}
+                dir={branchSort?.dir || "asc"}
+                onClick={() =>
+                  setBranchSort(s => ({
+                    key: "total_grs",
+                    dir: s?.key === "total_grs" && s.dir === "asc" ? "desc" : "asc",
+                  }))
+                }
+                align="right"
+              />
+              <SortTH
+                label="Collected LRs"
+                sortKey="collected_grs"
+                activeKey={branchSort?.key || ""}
+                dir={branchSort?.dir || "asc"}
+                onClick={() =>
+                  setBranchSort(s => ({
+                    key: "collected_grs",
+                    dir: s?.key === "collected_grs" && s.dir === "asc" ? "desc" : "asc",
+                  }))
+                }
+                align="right"
+              />
+              <SortTH
+                label="LR %"
+                sortKey="lr_pct"
+                activeKey={branchSort?.key || ""}
+                dir={branchSort?.dir || "asc"}
+                onClick={() =>
+                  setBranchSort(s => ({
+                    key: "lr_pct",
+                    dir: s?.key === "lr_pct" && s.dir === "asc" ? "desc" : "asc",
+                  }))
+                }
+                align="right"
+              />
+              <SortTH
+                label="Total Freight"
+                sortKey="total_freight"
+                activeKey={branchSort?.key || ""}
+                dir={branchSort?.dir || "asc"}
+                onClick={() =>
+                  setBranchSort(s => ({
+                    key: "total_freight",
+                    dir: s?.key === "total_freight" && s.dir === "asc" ? "desc" : "asc",
+                  }))
+                }
+                align="right"
+              />
+              <SortTH
+                label="Amount %"
+                sortKey="amt_pct"
+                activeKey={branchSort?.key || ""}
+                dir={branchSort?.dir || "asc"}
+                onClick={() =>
+                  setBranchSort(s => ({
+                    key: "amt_pct",
+                    dir: s?.key === "amt_pct" && s.dir === "asc" ? "desc" : "asc",
+                  }))
+                }
+                align="right"
+              />
+              <SortTH
+                label="Balance"
+                sortKey="balance"
+                activeKey={branchSort?.key || ""}
+                dir={branchSort?.dir || "asc"}
+                onClick={() =>
+                  setBranchSort(s => ({
+                    key: "balance",
+                    dir: s?.key === "balance" && s.dir === "asc" ? "desc" : "asc",
+                  }))
+                }
+                align="right"
+              />
+            </tr>
           </thead>
           <tbody>
               {pagedBranchRows.map((b) => (
@@ -566,57 +564,75 @@ return (
 
       {areaOpen && (
         <table className="min-w-full border-collapse text-sm">
-          <thead className="bg-gray-100">
-<tr>
-  <th className="border px-2 py-1 cursor-pointer" onClick={() =>
-    setAreaSort(s => ({
-      key: "area_manager",
-      dir: s?.key === "area_manager" && s.dir === "asc" ? "desc" : "asc",
-    }))
-  }>
-    Area Manager {areaSort?.key === "area_manager" ? (areaSort.dir === "asc" ? "▲" : "▼") : ""}
-  </th>
-
-  <th className="border px-2 py-1 cursor-pointer text-center" onClick={() =>
-    setAreaSort(s => ({
-      key: "totalGRs",
-      dir: s?.key === "totalGRs" && s.dir === "asc" ? "desc" : "asc",
-    }))
-  }>
-    Total LRs {areaSort?.key === "totalGRs" ? (areaSort.dir === "asc" ? "▲" : "▼") : ""}
-  </th>
-
-  <th className="border px-2 py-1 cursor-pointer text-center" onClick={() =>
-    setAreaSort(s => ({
-      key: "collectedGRs",
-      dir: s?.key === "collectedGRs" && s.dir === "asc" ? "desc" : "asc",
-    }))
-  }>
-    Collected LRs {areaSort?.key === "collectedGRs" ? (areaSort.dir === "asc" ? "▲" : "▼") : ""}
-  </th>
-
-  <th className="border px-2 py-1 text-center">LR %</th>
-
-  <th className="border px-2 py-1 cursor-pointer text-right" onClick={() =>
-    setAreaSort(s => ({
-      key: "totalFreight",
-      dir: s?.key === "totalFreight" && s.dir === "asc" ? "desc" : "asc",
-    }))
-  }>
-    Total Freight {areaSort?.key === "totalFreight" ? (areaSort.dir === "asc" ? "▲" : "▼") : ""}
-  </th>
-
-  <th className="border px-2 py-1 text-center">Amount %</th>
-
-  <th className="border px-2 py-1 cursor-pointer text-right" onClick={() =>
-    setAreaSort(s => ({
-      key: "balance",
-      dir: s?.key === "balance" && s.dir === "asc" ? "desc" : "asc",
-    }))
-  }>
-    Balance {areaSort?.key === "balance" ? (areaSort.dir === "asc" ? "▲" : "▼") : ""}
-  </th>
-</tr>
+          <thead className="bg-gray-50">
+            <tr className="text-left">
+              <SortTH
+                label="Area Manager"
+                sortKey="area_manager"
+                activeKey={areaSort?.key || ""}
+                dir={areaSort?.dir || "asc"}
+                onClick={() =>
+                  setAreaSort(s => ({
+                    key: "area_manager",
+                    dir: s?.key === "area_manager" && s.dir === "asc" ? "desc" : "asc",
+                  }))
+                }
+              />
+              <SortTH
+                label="Total LRs"
+                sortKey="totalGRs"
+                activeKey={areaSort?.key || ""}
+                dir={areaSort?.dir || "asc"}
+                onClick={() =>
+                  setAreaSort(s => ({
+                    key: "totalGRs",
+                    dir: s?.key === "totalGRs" && s.dir === "asc" ? "desc" : "asc",
+                  }))
+                }
+                align="right"
+              />
+              <SortTH
+                label="Collected LRs"
+                sortKey="collectedGRs"
+                activeKey={areaSort?.key || ""}
+                dir={areaSort?.dir || "asc"}
+                onClick={() =>
+                  setAreaSort(s => ({
+                    key: "collectedGRs",
+                    dir: s?.key === "collectedGRs" && s.dir === "asc" ? "desc" : "asc",
+                  }))
+                }
+                align="right"
+              />
+              <th className="px-3 py-2 text-right">LR %</th>
+              <SortTH
+                label="Total Freight"
+                sortKey="totalFreight"
+                activeKey={areaSort?.key || ""}
+                dir={areaSort?.dir || "asc"}
+                onClick={() =>
+                  setAreaSort(s => ({
+                    key: "totalFreight",
+                    dir: s?.key === "totalFreight" && s.dir === "asc" ? "desc" : "asc",
+                  }))
+                }
+                align="right"
+              />
+              <th className="px-3 py-2 text-right">Amount %</th>
+              <SortTH
+                label="Balance"
+                sortKey="balance"
+                activeKey={areaSort?.key || ""}
+                dir={areaSort?.dir || "asc"}
+                onClick={() =>
+                  setAreaSort(s => ({
+                    key: "balance",
+                    dir: s?.key === "balance" && s.dir === "asc" ? "desc" : "asc",
+                  }))
+                }
+                align="right"
+              />
+            </tr>
           </thead>
           <tbody>
             {sortedAreaRows.map((a) => (
@@ -695,106 +711,113 @@ return (
           )}
 
           <table className="min-w-full border-collapse text-sm">
-            <thead className="bg-gray-100">
-<tr>
-  <th className="border px-2 py-1 cursor-pointer" onClick={() =>
-    setPartySort(s => ({
-      key: "party_name",
-      dir: s?.key === "party_name" && s.dir === "asc" ? "desc" : "asc",
-    }))
-  }>
-    Party {partySort?.key === "party_name" ? (partySort.dir === "asc" ? "▲" : "▼") : ""}
-  </th>
-
-  <th className="border px-2 py-1 cursor-pointer text-center" onClick={() =>
-    setPartySort(s => ({
-      key: "total_grs",
-      dir: s?.key === "total_grs" && s.dir === "asc" ? "desc" : "asc",
-    }))
-  }>
-    Total LRs {partySort?.key === "total_grs" ? (partySort.dir === "asc" ? "▲" : "▼") : ""}
-  </th>
-
-  <th className="border px-2 py-1 cursor-pointer text-center" onClick={() =>
-    setPartySort(s => ({
-      key: "collected_grs",
-      dir: s?.key === "collected_grs" && s.dir === "asc" ? "desc" : "asc",
-    }))
-  }>
-    Collected LRs {partySort?.key === "collected_grs" ? (partySort.dir === "asc" ? "▲" : "▼") : ""}
-  </th>
-
-<th
-  className="border px-2 py-1 cursor-pointer text-center"
-  onClick={() =>
-    setPartySort((s) => ({
-      key: "lr_pct",
-      dir: s?.key === "lr_pct" && s.dir === "asc" ? "desc" : "asc",
-    }))
-  }
->
-  LR %{" "}
-  {partySort?.key === "lr_pct"
-    ? partySort.dir === "asc"
-      ? "▲"
-      : "▼"
-    : ""}
-</th>
-
-<th
-  className="border px-2 py-1 cursor-pointer text-center"
-  onClick={() =>
-    setPartySort((s) => ({
-      key: "amt_pct",
-      dir: s?.key === "amt_pct" && s.dir === "asc" ? "desc" : "asc",
-    }))
-  }
->
-  Amount %{" "}
-  {partySort?.key === "amt_pct"
-    ? partySort.dir === "asc"
-      ? "▲"
-      : "▼"
-    : ""}
-</th>
-
-
-  <th className="border px-2 py-1 cursor-pointer text-center" onClick={() =>
-    setPartySort(s => ({
-      key: "oldest_days",
-      dir: s?.key === "oldest_days" && s.dir === "asc" ? "desc" : "asc",
-    }))
-  }>
-    Oldest {partySort?.key === "oldest_days" ? (partySort.dir === "asc" ? "▲" : "▼") : ""}
-  </th>
-</tr>
-            </thead>
-            <tbody>
-              {pagedPartyRows.map((r) => (
-                 <tr key={r.party_name}>
-                  <td className="border px-2 py-1">{r.party_name}</td>
-                  <td className="border px-2 py-1 text-center">{r.total_grs}</td>
-                  <td className="border px-2 py-1 text-center">{r.collected_grs}</td>
-
-                  <td className="border px-2 py-1 text-center">
-                    {pct(r.collected_grs, r.total_grs)}
-                  </td>
-
-                  <td className="border px-2 py-1 text-right">
-                    ₹ {fmt(r.total_freight)}
-                  </td>
-
-                  <td className="border px-2 py-1 text-center">
-                    {pct(r.collected, r.total_freight)}
-                  </td>
-
-                  <td className="border px-2 py-1 text-right text-red-700">
-                    ₹ {fmt(r.balance)}
-                  </td>
-                  <td className="border px-2 py-1 text-center">{r.oldest_days}</td>
-                </tr>
-              ))}
-            </tbody>
+          <thead className="bg-gray-50">
+            <tr className="text-left">
+              <SortTH
+                label="Party"
+                sortKey="party_name"
+                activeKey={partySort?.key || ""}
+                dir={partySort?.dir || "asc"}
+                onClick={() =>
+                  setPartySort(s => ({
+                    key: "party_name",
+                    dir: s?.key === "party_name" && s.dir === "asc" ? "desc" : "asc",
+                  }))
+                }
+              />
+              <SortTH
+                label="Total LRs"
+                sortKey="total_grs"
+                activeKey={partySort?.key || ""}
+                dir={partySort?.dir || "asc"}
+                onClick={() =>
+                  setPartySort(s => ({
+                    key: "total_grs",
+                    dir: s?.key === "total_grs" && s.dir === "asc" ? "desc" : "asc",
+                  }))
+                }
+                align="right"
+              />
+              <SortTH
+                label="Collected LRs"
+                sortKey="collected_grs"
+                activeKey={partySort?.key || ""}
+                dir={partySort?.dir || "asc"}
+                onClick={() =>
+                  setPartySort(s => ({
+                    key: "collected_grs",
+                    dir: s?.key === "collected_grs" && s.dir === "asc" ? "desc" : "asc",
+                  }))
+                }
+                align="right"
+              />
+              <SortTH
+                label="LR %"
+                sortKey="lr_pct"
+                activeKey={partySort?.key || ""}
+                dir={partySort?.dir || "asc"}
+                onClick={() =>
+                  setPartySort(s => ({
+                    key: "lr_pct",
+                    dir: s?.key === "lr_pct" && s.dir === "asc" ? "desc" : "asc",
+                  }))
+                }
+                align="right"
+              />
+              <SortTH
+                label="Total Freight"
+                sortKey="total_freight"
+                activeKey={partySort?.key || ""}
+                dir={partySort?.dir || "asc"}
+                onClick={() =>
+                  setPartySort(s => ({
+                    key: "total_freight",
+                    dir: s?.key === "total_freight" && s.dir === "asc" ? "desc" : "asc",
+                  }))
+                }
+                align="right"
+              />
+              <SortTH
+                label="Amount %"
+                sortKey="amt_pct"
+                activeKey={partySort?.key || ""}
+                dir={partySort?.dir || "asc"}
+                onClick={() =>
+                  setPartySort(s => ({
+                    key: "amt_pct",
+                    dir: s?.key === "amt_pct" && s.dir === "asc" ? "desc" : "asc",
+                  }))
+                }
+                align="right"
+              />
+              <SortTH
+                label="Balance"
+                sortKey="balance"
+                activeKey={partySort?.key || ""}
+                dir={partySort?.dir || "asc"}
+                onClick={() =>
+                  setPartySort(s => ({
+                    key: "balance",
+                    dir: s?.key === "balance" && s.dir === "asc" ? "desc" : "asc",
+                  }))
+                }
+                align="right"
+              />
+            </tr>
+          </thead>
+          <tbody>
+            {pagedPartyRows.map((r) => (
+              <tr key={r.party_name}>
+                <td className="border px-2 py-1">{r.party_name}</td>
+                <td className="border px-2 py-1 text-right">{r.total_grs}</td>
+                <td className="border px-2 py-1 text-right">{r.collected_grs}</td>
+                <td className="border px-2 py-1 text-right">{pct(r.collected_grs, r.total_grs)}</td>
+                <td className="border px-2 py-1 text-right">₹ {fmt(r.total_freight)}</td>
+                <td className="border px-2 py-1 text-right">{pct(r.collected, r.total_freight)}</td>
+                <td className="border px-2 py-1 text-right text-red-700">₹ {fmt(r.balance)}</td>
+              </tr>
+            ))}
+          </tbody>
           </table>
             <div className="flex justify-end gap-2 pt-2">
               <button
@@ -822,4 +845,60 @@ return (
     </div>
   </div>
 );
+}
+
+// ================= HELPERS =================
+function SortTH({
+  label,
+  sortKey,
+  activeKey,
+  dir,
+  onClick,
+  align = "left",
+}: {
+  label: string;
+  sortKey: string;
+  activeKey: string;
+  dir: "asc" | "desc";
+  onClick: () => void;
+  align?: "left" | "right";
+}) {
+  const isActive = sortKey === activeKey;
+  return (
+    <th
+      onClick={onClick}
+      className={`px-3 py-2 cursor-pointer select-none border-b hover:bg-gray-100 ${
+        align === "right" ? "text-right" : "text-left"
+      }`}
+    >
+      <span className={`inline-flex items-center gap-1 ${align === "right" ? "justify-end w-full" : ""}`}>
+        {label}
+        {isActive && (
+          <span className="text-xs text-gray-500">{dir === "asc" ? "▲" : "▼"}</span>
+        )}
+      </span>
+    </th>
+  );
+}
+
+function Kpi({ label, value, green, red }: any) {
+  return (
+    <div className="relative overflow-hidden rounded-xl bg-white border border-gray-200 shadow-sm p-4 hover:shadow-md transition">
+      <div
+        className={`absolute top-0 left-0 h-1 w-full ${
+          green ? "bg-green-500" : red ? "bg-red-500" : "bg-blue-500"
+        }`}
+      />
+      <div className="text-xs uppercase tracking-wide text-gray-500 font-medium">
+        {label}
+      </div>
+      <div
+        className={`mt-2 text-2xl font-bold ${
+          green ? "text-green-700" : red ? "text-red-700" : "text-gray-800"
+        }`}
+      >
+        {value}
+      </div>
+    </div>
+  );
 }

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import bcrypt from "bcryptjs";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabase";
 import { useBranch } from "@/context/BranchContext";
 
 export default function ChangePassword() {
@@ -11,7 +10,7 @@ export default function ChangePassword() {
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
-  const { branch, role, username, setBranchContext } = useBranch();
+  const { refreshProfile } = useBranch();
 
   async function handleChangePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -34,31 +33,38 @@ export default function ChangePassword() {
 
     setLoading(true);
 
-    const hashed = await bcrypt.hash(newPassword, 10);
+    const { error: authError } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
 
-    const { error } = await supabase
-      .from("branches")
-      .update({
-        password_hash: hashed,
-        must_change_password: false,
-        last_password_reset_at: new Date().toISOString(),
-      })
-      .eq("branch_code", branch);
-
-    setLoading(false);
-
-    if (error) {
-      setError("Something went wrong. Try again.");
+    if (authError) {
+      setLoading(false);
+      setError(authError.message || "Password update failed. Please try again.");
       return;
     }
 
-    setBranchContext({
-    branch: branch!,
-    role: role!,
-    username: username!,
-    must_change_password: false,
-    });
-        
+    const { error: profileError } = await supabase.rpc(
+      "branch_complete_password_change"
+    );
+
+    if (profileError) {
+      setLoading(false);
+      setError(
+        profileError.message?.toLowerCase().includes("function")
+          ? "Password change function not found. Please run the SQL setup once."
+          : "Password updated, but profile sync failed. Please contact admin."
+      );
+      return;
+    }
+
+    const profile = await refreshProfile();
+    setLoading(false);
+
+    if (!profile) {
+      setError("Session refresh failed. Please login again.");
+      return;
+    }
+
     navigate("/dashboard", { replace: true });
   }
 

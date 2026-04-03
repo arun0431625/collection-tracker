@@ -1,54 +1,45 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import bcrypt from "bcryptjs";
-import { supabase } from "../lib/supabaseClient";
-import { useBranch } from "../context/BranchContext";
+import { signInWithBranchPassword } from "@/services/auth";
+import { useBranch } from "@/context/BranchContext";
 
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { setBranchContext } = useBranch();
+  const { branch, loading: authLoading } = useBranch();
+
+  useEffect(() => {
+    if (!authLoading && branch) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [authLoading, branch, navigate]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setLoading(true);
 
-    const uname = username.trim().toUpperCase();
+    try {
+      const profile = await signInWithBranchPassword(username, password);
 
-    const { data, error } = await supabase
-      .from("branches")
-      .select("branch_code, branch_name, area_manager, password_hash, role, must_change_password, is_active")
-      .eq("branch_code", uname)
-      .eq("is_active", true)
-      .single();
-
-    if (error || !data) {
-      setError("Invalid username or password");
-      return;
-    }
-
-    const match = await bcrypt.compare(password, data.password_hash);
-
-    if (!match) {
-      setError("Invalid username or password");
-      return;
-    }
-
-    console.log("LOGIN DATA:", data);
-
-        // ✅ LOGIN SUCCESS
-    setBranchContext({
-      branch: data.branch_code,
-      role: data.role,
-      username: data.branch_code,
-      must_change_password: data.must_change_password,
-    });
-    if (data.must_change_password) {
-      navigate("/change-password", { replace: true });
-    } else {
-      navigate("/dashboard", { replace: true });
+      if (profile.must_change_password) {
+        navigate("/change-password", { replace: true });
+      } else {
+        navigate("/dashboard", { replace: true });
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Invalid username or password";
+      setError(
+        message === "Invalid login credentials"
+          ? "Invalid username or password"
+          : message
+      );
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -89,9 +80,10 @@ export default function Login() {
 
         <button
           type="submit"
-          className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+          disabled={loading}
+          className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50"
         >
-          Login
+          {loading ? "Logging in..." : "Login"}
         </button>
       </form>
     </div>

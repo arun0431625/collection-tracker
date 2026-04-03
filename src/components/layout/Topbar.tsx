@@ -1,7 +1,7 @@
 import { useBranch } from "../../context/BranchContext";
 
 type Props = {
-  onLogout: () => void;
+  onLogout: () => void | Promise<void>;
 };
 
 export default function Topbar({ onLogout }: Props) {

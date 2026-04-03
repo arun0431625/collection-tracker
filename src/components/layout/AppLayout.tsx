@@ -7,19 +7,16 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const { logout } = useBranch();
 
-  function handleLogout() {
-    logout();                 // 🔹 session + localStorage clear
-    navigate("/login", {      // 🔹 login page pe bhejo
-      replace: true,
-    });
+  async function handleLogout() {
+    await logout();
+    navigate("/login", { replace: true });
   }
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar />
+      <Sidebar onLogout={handleLogout} />
 
-      <div className="flex flex-col flex-1 bg-gray-100">
-        {/* 🔹 Topbar ke andar logout button bhej rahe hain */}
+      <div className="flex flex-col flex-1 min-w-0 bg-gray-50">
         <Topbar onLogout={handleLogout} />
 
         <main className="flex-1 overflow-auto p-4">

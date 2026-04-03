@@ -1,5 +1,17 @@
 import { supabase } from "@/lib/supabase";
 
+export async function fetchAccessibleCollectionBranchCodes() {
+  const { data, error } = await supabase.rpc(
+    "get_accessible_collection_branch_codes"
+  );
+
+  if (error) throw error;
+
+  return ((data || []) as { branch_code: string }[]).map(
+    (row) => row.branch_code
+  );
+}
+
 export async function fetchCollections({
   branch,
   role,
@@ -93,11 +105,15 @@ export async function updateCollectionPayment(
     remarks?: string;
   }
 ) {
-  const { error } = await supabase
-    .from("collections_with_status")
-    .update(payload)
-    .eq("gr_no", gr_no)
-    .eq("branch_code", branch_code);
+  const { error } = await supabase.rpc("branch_update_collection_payment", {
+    p_gr_no: gr_no,
+    p_branch_code: branch_code,
+    p_payment_mode: payload.payment_mode ?? null,
+    p_received_amount: payload.received_amount ?? null,
+    p_payment_date: payload.payment_date ?? null,
+    p_ref_no: payload.ref_no ?? null,
+    p_remarks: payload.remarks ?? null,
+  });
 
   if (error) {
     throw error;

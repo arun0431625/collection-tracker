@@ -12,13 +12,17 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-export default function Sidebar() {
+type SidebarProps = {
+  onLogout: () => void | Promise<void>;
+};
+
+export default function Sidebar({ onLogout }: SidebarProps) {
   const { role, branch } = useBranch();
   const [collapsed, setCollapsed] = useState(false);
 
   return (
     <aside
-      className={`h-screen bg-[#0f172a] text-white flex flex-col transition-all duration-300 ${
+      className={`h-screen bg-[#0f172a] text-white flex flex-col transition-all duration-300 shrink-0 ${
         collapsed ? "w-20" : "w-60"
       }`}
     >
@@ -59,7 +63,10 @@ export default function Sidebar() {
 
       {/* Logout */}
       <div className="px-2 pb-4">
-        <button className="flex items-center gap-3 w-full px-4 py-2 rounded-md text-slate-400 hover:bg-red-600 hover:text-white transition">
+        <button
+          onClick={onLogout}
+          className="flex items-center gap-3 w-full px-4 py-2 rounded-md text-slate-400 hover:bg-red-600 hover:text-white transition"
+        >
           <LogOut size={18} />
           {!collapsed && "Logout"}
         </button>

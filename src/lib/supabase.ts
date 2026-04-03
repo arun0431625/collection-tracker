@@ -7,11 +7,3 @@ export const supabase = createClient(
   supabaseUrl,
   supabaseAnonKey
 );
-supabase.auth.onAuthStateChange((_event, session) => {
-  if (session) {
-    session.user.app_metadata = {
-      ...session.user.app_metadata,
-      branch_code: localStorage.getItem("branch"),
-    };
-  }
-});

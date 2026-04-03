@@ -1,5 +1,5 @@
   import { useEffect, useMemo, useState } from "react";
-  import { supabase } from "@/lib/supabaseClient";
+  import { supabase } from "@/lib/supabase";
   import { useBranch } from "@/context/BranchContext";
 
   /* ---------------- Types ---------------- */
@@ -411,22 +411,7 @@
                     align="right"
                   />
 
-                  <SortTH
-                    label="Balance"
-                    sortKey="total"
-                    activeKey={branchSort.key}
-                    dir={branchSort.dir}
-                    onClick={() =>
-                      setBranchSort({
-                        key: "total",
-                        dir:
-                          branchSort.key === "total" && branchSort.dir === "asc"
-                            ? "desc"
-                            : "asc",
-                      })
-                    }
-                    align="right"
-                  />
+                  <th className="px-3 py-2 text-right">Balance</th>
                 </tr>
               </thead>
 
