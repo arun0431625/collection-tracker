@@ -103,7 +103,15 @@ function parseUploadRow(r: any): UploadRow | null {
 function buildCollectionFieldUpdates(rawRows: any[]) {
   const updates: CollectionFieldUpdateRow[] = [];
   rawRows.forEach((row) => {
-    const paymentMode = String(row["Payment Mode"] || "").trim();
+    let paymentMode = String(row["Payment Mode"] || "").trim();
+    const pmUpper = paymentMode.toUpperCase();
+    if (pmUpper === "CASH") paymentMode = "Cash";
+    else if (pmUpper === "ONLINE") paymentMode = "Online";
+    else if (pmUpper === "CHEQUE") paymentMode = "Cheque";
+    else if (pmUpper === "NEFT") paymentMode = "NEFT";
+    else if (pmUpper === "RTGS") paymentMode = "RTGS";
+    else if (pmUpper === "UPI") paymentMode = "UPI";
+
     const receivedAmount = parseFreight(row["Received"]);
     const paymentDate = excelDateToISO(row["Payment Date"]);
     const refNo = String(row["Ref No"] || "").trim();

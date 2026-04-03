@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import * as XLSX from "xlsx";
 
 /* ---------------- Types ---------------- */
 type KPI = {
@@ -123,6 +124,14 @@ export default function Dashboard() {
   const [trackerData, setTrackerData] = useState<BranchTrackerRow[]>([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
+  // Sorting and Pagination for Tracker
+  const [trackerPage, setTrackerPage] = useState(1);
+  const [trackerSort, setTrackerSort] = useState<{
+    key: keyof BranchTrackerRow;
+    dir: "asc" | "desc";
+  } | null>(null);
+  const PAGE_SIZE = 15;
+
   useEffect(() => {
     async function fetchAnalytics() {
       setAnalyticsLoading(true);
@@ -168,6 +177,41 @@ export default function Dashboard() {
     fetchAnalytics();
   }, [trendDays, branch, role]);
 
+
+  const sortedTrackerData = useMemo(() => {
+    let sorted = [...trackerData];
+    if (trackerSort) {
+      sorted.sort((a, b) => {
+        const valA = a[trackerSort.key];
+        const valB = b[trackerSort.key];
+        if (valA < valB) return trackerSort.dir === "asc" ? -1 : 1;
+        if (valA > valB) return trackerSort.dir === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
+    return sorted;
+  }, [trackerData, trackerSort]);
+
+  const pagedTrackerData = useMemo(() => {
+    const start = (trackerPage - 1) * PAGE_SIZE;
+    return sortedTrackerData.slice(start, start + PAGE_SIZE);
+  }, [sortedTrackerData, trackerPage]);
+
+  function exportTrackerToExcel() {
+    const ws = XLSX.utils.json_to_sheet(
+      sortedTrackerData.map((b) => ({
+        Branch: b.branch,
+        "Total GRs": b.total_grs,
+        "Collections Handled": b.collections_handled,
+        "Last Update": b.last_update ? formatDateLabel(b.last_update) : "Never",
+        "Days Inactive": b.days_inactive,
+        Status: b.days_inactive > 5 ? "Inactive" : b.days_inactive > 2 ? "Delayed" : "Active",
+      }))
+    );
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Branch_Activity");
+    XLSX.writeFile(wb, "branch_activity_status.xlsx");
+  }
 
   /* ---------------- UI ---------------- */
   return (
@@ -377,24 +421,81 @@ export default function Dashboard() {
       {/* NEW BRANCH INACTIVITY HEALTH TRACKER (ADMIN ONLY) */}
       {role === "ADMIN" && (
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 overflow-x-auto">
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold text-gray-800">
-              Branch Activity Monitor
-            </h2>
-            <p className="text-sm text-gray-500">
-              Track real-time data entry engagement across branches
-            </p>
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800">
+                Branch Activity Monitor
+              </h2>
+              <p className="text-sm text-gray-500">
+                Track real-time data entry engagement across branches
+              </p>
+            </div>
+            <button
+              onClick={exportTrackerToExcel}
+              className="px-3 py-1.5 bg-green-600 text-white rounded shadow-sm hover:bg-green-700 transition text-sm font-medium"
+            >
+              Export to Excel
+            </button>
           </div>
 
           <div className="overflow-x-auto border-t border-gray-100 mt-2">
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
-                <tr className="text-left text-gray-600 border-b border-gray-200">
-                  <th className="px-4 py-3 font-semibold w-1/4">Branch</th>
-                  <th className="px-4 py-3 font-semibold text-right">Total GRs</th>
-                  <th className="px-4 py-3 font-semibold text-right">Handled</th>
-                  <th className="px-4 py-3 font-semibold text-right">Last Update</th>
-                  <th className="px-4 py-3 font-semibold text-center w-1/5">Health Status</th>
+                <tr className="text-left">
+                  <SortTH
+                    label="Branch"
+                    sortKey="branch"
+                    activeKey={trackerSort?.key || ""}
+                    dir={trackerSort?.dir || "asc"}
+                    onClick={() =>
+                      setTrackerSort((s) => ({
+                        key: "branch",
+                        dir: s?.key === "branch" && s.dir === "asc" ? "desc" : "asc",
+                      }))
+                    }
+                  />
+                  <SortTH
+                    label="Total GRs"
+                    sortKey="total_grs"
+                    activeKey={trackerSort?.key || ""}
+                    dir={trackerSort?.dir || "asc"}
+                    align="right"
+                    onClick={() =>
+                      setTrackerSort((s) => ({
+                        key: "total_grs",
+                        dir: s?.key === "total_grs" && s.dir === "asc" ? "desc" : "asc",
+                      }))
+                    }
+                  />
+                  <SortTH
+                    label="Handled"
+                    sortKey="collections_handled"
+                    activeKey={trackerSort?.key || ""}
+                    dir={trackerSort?.dir || "asc"}
+                    align="right"
+                    onClick={() =>
+                      setTrackerSort((s) => ({
+                        key: "collections_handled",
+                        dir: s?.key === "collections_handled" && s.dir === "asc" ? "desc" : "asc",
+                      }))
+                    }
+                  />
+                  <SortTH
+                    label="Days Inactive"
+                    sortKey="days_inactive"
+                    activeKey={trackerSort?.key || ""}
+                    dir={trackerSort?.dir || "asc"}
+                    align="center"
+                    onClick={() =>
+                      setTrackerSort((s) => ({
+                        key: "days_inactive",
+                        dir: s?.key === "days_inactive" && s.dir === "asc" ? "desc" : "asc",
+                      }))
+                    }
+                  />
+                  <th className="px-3 py-2 border-b font-semibold text-center w-1/5 text-gray-600 hover:bg-gray-100">
+                    Health Status
+                  </th>
                 </tr>
               </thead>
 
@@ -406,7 +507,7 @@ export default function Dashboard() {
                         </td>
                     </tr>
                 ) : (
-                trackerData.map((b) => {
+                pagedTrackerData.map((b) => {
                   const isCritical = b.days_inactive > 5;
                   const isWarning = b.days_inactive > 2 && b.days_inactive <= 5;
                   const isHealthy = b.days_inactive <= 2;
@@ -430,14 +531,17 @@ export default function Dashboard() {
                       <td className="px-4 py-3 text-right text-green-700 font-medium">
                         {b.collections_handled}
                       </td>
-                      <td className="px-4 py-3 text-right text-gray-600">
-                        {b.last_update ? formatDateLabel(b.last_update) : "Never"}
+                      <td className="px-4 py-3 text-center text-gray-600 font-medium">
+                        {b.days_inactive} days
+                        <div className="text-xs text-gray-400 font-normal">
+                          {b.last_update ? formatDateLabel(b.last_update) : "Never"}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-center">
                         {isCritical ? (
-                           <span className="inline-flex px-2 py-0.5 rounded-md bg-red-100 text-red-800 text-xs font-semibold">Inactive: {b.days_inactive} days</span>
+                           <span className="inline-flex px-2 py-0.5 rounded-md bg-red-100 text-red-800 text-xs font-semibold">Inactive</span>
                         ) : isWarning ? (
-                           <span className="inline-flex px-2 py-0.5 rounded-md bg-yellow-100 text-yellow-800 text-xs font-semibold">Delayed: {b.days_inactive} days</span>
+                           <span className="inline-flex px-2 py-0.5 rounded-md bg-yellow-100 text-yellow-800 text-xs font-semibold">Delayed</span>
                         ) : (
                            <span className="inline-flex px-2 py-0.5 rounded-md bg-green-100 text-green-800 text-xs font-semibold">Active</span>
                         )}
@@ -448,6 +552,28 @@ export default function Dashboard() {
                )}
               </tbody>
             </table>
+            
+            {trackerData.length > PAGE_SIZE && (
+              <div className="flex justify-end gap-2 p-3 bg-gray-50 border-t">
+                <button
+                  disabled={trackerPage === 1}
+                  onClick={() => setTrackerPage((p) => p - 1)}
+                  className="px-3 py-1 border bg-white rounded shadow-sm disabled:opacity-50 text-sm"
+                >
+                  Prev
+                </button>
+                <span className="text-sm px-2 py-1 text-gray-600">
+                  Page {trackerPage} of {Math.ceil(trackerData.length / PAGE_SIZE)}
+                </span>
+                <button
+                  disabled={trackerPage >= Math.ceil(trackerData.length / PAGE_SIZE)}
+                  onClick={() => setTrackerPage((p) => p + 1)}
+                  className="px-3 py-1 border bg-white rounded shadow-sm disabled:opacity-50 text-sm"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -475,5 +601,46 @@ function Kpi({ label, value, green, red }: any) {
         {value}
       </div>
     </div>
+  );
+}
+
+function SortTH({
+  label,
+  sortKey,
+  activeKey,
+  dir,
+  onClick,
+  align = "left",
+}: {
+  label: string;
+  sortKey: string;
+  activeKey: string;
+  dir: "asc" | "desc";
+  onClick: () => void;
+  align?: "left" | "right" | "center";
+}) {
+  const isActive = sortKey === activeKey;
+  return (
+    <th
+      onClick={onClick}
+      className={`px-3 py-2 cursor-pointer select-none border-b hover:bg-gray-100 font-semibold text-gray-600 ${
+        align === "right"
+          ? "text-right"
+          : align === "center"
+          ? "text-center"
+          : "text-left"
+      }`}
+    >
+      <span
+        className={`inline-flex items-center gap-1 ${
+          align === "right" ? "justify-end w-full" : align === "center" ? "justify-center w-full" : ""
+        }`}
+      >
+        {label}
+        {isActive && (
+          <span className="text-xs text-gray-500">{dir === "asc" ? "▲" : "▼"}</span>
+        )}
+      </span>
+    </th>
   );
 }
