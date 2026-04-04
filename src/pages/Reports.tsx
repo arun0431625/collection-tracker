@@ -797,6 +797,16 @@ return (
                   }))
                 }
               />
+              <SortTH width="15%" label="Branches" sortKey="branches"
+                activeKey={partySort?.key || ""}
+                dir={partySort?.dir || "asc"}
+                onClick={() =>
+                  setPartySort(s => ({
+                    key: "branches",
+                    dir: s?.key === "branches" && s.dir === "asc" ? "desc" : "asc",
+                  }))
+                }
+              />
               <SortTH width="8%" label="Total LRs"
                 sortKey="total_grs"
                 activeKey={partySort?.key || ""}
