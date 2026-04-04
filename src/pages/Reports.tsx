@@ -441,7 +441,7 @@ return (
       </div>
 
       {branchOpen && (
-        <table className="min-w-full border-collapse text-sm">
+        <table className="w-full table-fixed border-collapse text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left">
               <SortTH
@@ -619,7 +619,7 @@ return (
       </div>
 
       {areaOpen && (
-        <table className="min-w-full border-collapse text-sm">
+        <table className="w-full table-fixed border-collapse text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left">
               <SortTH
@@ -722,7 +722,7 @@ return (
     {/* Ageing */}
     <div className="rounded border bg-white">
       <div className="px-3 py-2 border-b font-semibold text-sm">Ageing (Outstanding)</div>
-      <table className="min-w-full border-collapse text-sm">
+      <table className="w-full table-fixed border-collapse text-sm">
         <thead className="bg-gray-100">
           <tr>
             <th className="border px-2 py-1">Bucket</th>
@@ -788,7 +788,7 @@ return (
             <div className="text-sm text-gray-500">Loading party outstanding…</div>
           )}
 
-          <table className="min-w-full border-collapse text-sm">
+          <table className="w-full table-fixed border-collapse text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left">
               <SortTH
