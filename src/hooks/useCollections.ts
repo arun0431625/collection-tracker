@@ -1,10 +1,11 @@
 import { useState, useCallback, useDeferredValue, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { fetchAccessibleCollectionBranchCodes, fetchCollections, updateCollectionPayment } from "@/services/collections.api";
+import { fetchAccessibleCollectionBranchCodes, fetchCollections, updateCollectionPayment, fetchCollectionMonths } from "@/services/collections.api";
 import { EditState, GRRow } from "@/types/collections";
 import { StatusFilter, STATUS } from "@/types/constants";
 import { toast } from "sonner";
 import { useBranch } from "@/context/BranchContext";
+import { useSessionStorageState } from "./useSessionStorageState";
 
 export function useCollections() {
   const { branch, role } = useBranch();
@@ -31,14 +32,27 @@ export function useCollections() {
   const [savedRow, setSavedRow] = useState<string | null>(null);
   const [rowErrors, setRowErrors] = useState<Record<string, Partial<Record<keyof EditState, boolean>>>>({});
   
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>(STATUS.ALL);
-  const [search, setSearch] = useState("");
-  const [selectedMonth, setSelectedMonth] = useState("");
-  const [selectedBranch, setSelectedBranch] = useState("");
+  const [statusFilter, setStatusFilter] = useSessionStorageState<StatusFilter>("coll_status", STATUS.ALL);
+  const [search, setSearch] = useSessionStorageState<string>("coll_search", "");
+  const [selectedMonth, setSelectedMonth] = useSessionStorageState<string>("coll_month", "");
+  const [selectedBranch, setSelectedBranch] = useSessionStorageState<string>("coll_branch", "");
   
   const effectiveBranch = isAdmin ? selectedBranch || null : branch;
   const [branchOptions, setBranchOptions] = useState<string[]>([]);
+  const [monthOptions, setMonthOptions] = useState<{ value: string; label: string }[]>([]);
   const deferredSearch = useDeferredValue(search);
+
+  useEffect(() => {
+    const fetchOptions = async () => {
+      try {
+        const months = await fetchCollectionMonths();
+        setMonthOptions(months);
+      } catch (error) {
+        console.error("Failed to fetch months", error);
+      }
+    };
+    fetchOptions();
+  }, []);
 
   const updateKpiTotals = useCallback((kpiData: any[] | null) => {
     if (!kpiData || kpiData.length === 0) return;
@@ -219,6 +233,7 @@ export function useCollections() {
     selectedBranch,
     setSelectedBranch,
     branchOptions,
+    monthOptions,
     handleChange,
     handleSave,
     branch,

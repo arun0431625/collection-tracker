@@ -31,6 +31,7 @@ export default function Collections() {
     selectedBranch,
     setSelectedBranch,
     branchOptions,
+    monthOptions,
     handleChange,
     handleSave,
     branch,
@@ -197,12 +198,14 @@ export default function Collections() {
             setCurrentPage(1);
             setSelectedMonth(e.target.value);
           }}
-          className="border px-3 py-2 rounded-md text-sm ml-2"
+          className="border px-3 py-2 rounded-md text-sm ml-2 bg-white"
         >
           <option value="">All Months</option>
-          <option value="2026-01">Jan 2026</option>
-          <option value="2026-02">Feb 2026</option>
-          <option value="2026-03">Mar 2026</option>
+          {(monthOptions || []).map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+            </option>
+          ))}
         </select>
         
         {isAdmin && (

@@ -119,3 +119,9 @@ export async function updateCollectionPayment(
     throw error;
   }
 }
+
+export async function fetchCollectionMonths() {
+  const { data, error } = await supabase.rpc("get_collection_months");
+  if (error) throw (error as any);
+  return (data || []) as { value: string; label: string }[];
+}
