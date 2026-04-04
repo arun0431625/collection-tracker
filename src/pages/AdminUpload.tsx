@@ -206,6 +206,10 @@ export default function AdminUpload() {
       newInsertAmount, overwriteOldAmount, overwriteNewAmount, overwriteNetImpact,
       collectionUpdatedCount, collectionImpactAmount, rawRowsCache, validRowsCache, fileName]);
 
+  // ⚠️ Removed aggressive automatic persistence to avoid performance lag with large files.
+  // Instead, we persist manually after major actions.
+
+  // Persistence for stage changes (cheap)
   useEffect(() => {
     if (stage !== "IDLE") {
       persistState();
@@ -288,6 +292,8 @@ export default function AdminUpload() {
         setCollectionUpdatedCount(0);
         setCollectionImpactAmount(0);
         setStage("VALIDATED");
+        // Manual persist after validation
+        setTimeout(persistState, 0);
         toast.success("File validation complete!");
       } catch (err) {
         toast.error("Failed to parse the Excel file.");
@@ -352,6 +358,8 @@ export default function AdminUpload() {
     setStage("DUPLICATES_CHECKED");
     setLoading(false);
     setIsChecking(false);
+    // Manual persist after duplicate check
+    setTimeout(persistState, 0);
     toast.success("Duplicate check complete!");
   }
 
