@@ -416,10 +416,33 @@ return (
       <Kpi label="Balance" value={`₹ ${fmt(summary.balance)}`} red />
     </div>
 
+    {/* Ageing */}
+    <div className="rounded border bg-white">
+      <div className="px-4 py-3 border-b font-bold text-sm bg-slate-800 text-white rounded-t">Ageing (Outstanding)</div>
+      <table className="w-full table-fixed border-collapse text-sm">
+        <thead className="bg-gray-100">
+          <tr>
+            <th className="border px-2 py-1">Bucket</th>
+            <th className="border px-2 py-1 text-right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Object.entries(ageingRows.reduce((m: any, r) => { m[r.bucket] = (m[r.bucket]||0)+r.balance; return m; }, {})).map(
+            ([bucket, amt]) => (
+              <tr key={bucket}>
+                <td className="border px-2 py-1">{bucket} days</td>
+                <td className="border px-2 py-1 text-right">₹ {fmt(amt as number)}</td>
+              </tr>
+            )
+          )}
+        </tbody>
+      </table>
+    </div>
+
     {/* Branch-wise */}
     <div className="rounded border bg-white">
             <div
-        className="px-3 py-2 border-b font-semibold text-sm cursor-pointer flex justify-between items-center"
+        className="px-4 py-3 border-b font-bold text-sm cursor-pointer flex justify-between items-center bg-slate-800 text-white rounded-t hover:bg-slate-700 transition"
         onClick={() => setBranchOpen((o) => !o)}
       >
         <span>Branch-wise Outstanding</span>
@@ -440,7 +463,7 @@ return (
                 `Branch_Outstanding_${fromDate}_to_${toDate}`
               );
             }}
-            className="text-xs bg-emerald-50 text-emerald-700 px-3 py-1 rounded shadow-sm border border-emerald-200 hover:bg-emerald-100 transition"
+            className="text-xs bg-emerald-500 text-white px-3 py-1 rounded shadow border border-emerald-600 hover:bg-emerald-600 transition"
           >
             Export Excel
           </button>
@@ -452,7 +475,7 @@ return (
         <table className="w-full table-fixed border-collapse text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left">
-              <SortTH className="w-[42%]" label="Branch" sortKey="branch_code"
+              <SortTH className="w-[50%]" label="Branch" sortKey="branch_code"
                 activeKey={branchSort?.key || ""}
                 dir={branchSort?.dir || "asc"}
                 onClick={() =>
@@ -462,8 +485,7 @@ return (
                   }))
                 }
               />
-              <SortTH
-                label="Total LRs"
+              <SortTH className="w-[8%]" label="Total LRs"
                 sortKey="total_grs"
                 activeKey={branchSort?.key || ""}
                 dir={branchSort?.dir || "asc"}
@@ -473,10 +495,9 @@ return (
                     dir: s?.key === "total_grs" && s.dir === "asc" ? "desc" : "asc",
                   }))
                 }
-                align="right"
+                
               />
-              <SortTH
-                label="Collected LRs"
+              <SortTH className="w-[8%]" label="Collected LRs"
                 sortKey="collected_grs"
                 activeKey={branchSort?.key || ""}
                 dir={branchSort?.dir || "asc"}
@@ -486,10 +507,9 @@ return (
                     dir: s?.key === "collected_grs" && s.dir === "asc" ? "desc" : "asc",
                   }))
                 }
-                align="right"
+                
               />
-              <SortTH
-                label="LR %"
+              <SortTH className="w-[6%]" label="LR %"
                 sortKey="lr_pct"
                 activeKey={branchSort?.key || ""}
                 dir={branchSort?.dir || "asc"}
@@ -499,10 +519,9 @@ return (
                     dir: s?.key === "lr_pct" && s.dir === "asc" ? "desc" : "asc",
                   }))
                 }
-                align="right"
+                
               />
-              <SortTH
-                label="Total Freight"
+              <SortTH className="w-[11%]" label="Total Freight"
                 sortKey="total_freight"
                 activeKey={branchSort?.key || ""}
                 dir={branchSort?.dir || "asc"}
@@ -512,10 +531,9 @@ return (
                     dir: s?.key === "total_freight" && s.dir === "asc" ? "desc" : "asc",
                   }))
                 }
-                align="right"
+                
               />
-              <SortTH
-                label="Amount %"
+              <SortTH className="w-[6%]" label="Amount %"
                 sortKey="amt_pct"
                 activeKey={branchSort?.key || ""}
                 dir={branchSort?.dir || "asc"}
@@ -525,10 +543,9 @@ return (
                     dir: s?.key === "amt_pct" && s.dir === "asc" ? "desc" : "asc",
                   }))
                 }
-                align="right"
+                
               />
-              <SortTH
-                label="Balance"
+              <SortTH className="w-[11%]" label="Balance"
                 sortKey="balance"
                 activeKey={branchSort?.key || ""}
                 dir={branchSort?.dir || "asc"}
@@ -538,7 +555,7 @@ return (
                     dir: s?.key === "balance" && s.dir === "asc" ? "desc" : "asc",
                   }))
                 }
-                align="right"
+                
               />
             </tr>
           </thead>
@@ -595,7 +612,7 @@ return (
     {/* Area Manager */}
     <div className="rounded border bg-white">
             <div
-        className="px-3 py-2 border-b font-semibold text-sm cursor-pointer flex justify-between items-center"
+        className="px-4 py-3 border-b font-bold text-sm cursor-pointer flex justify-between items-center bg-slate-800 text-white rounded-t hover:bg-slate-700 transition"
         onClick={() => setAreaOpen((o) => !o)}
       >
         <span>Area Manager-wise Outstanding</span>
@@ -616,7 +633,7 @@ return (
                 `Area_Outstanding_${fromDate}_to_${toDate}`
               );
             }}
-            className="text-xs bg-emerald-50 text-emerald-700 px-3 py-1 rounded shadow-sm border border-emerald-200 hover:bg-emerald-100 transition"
+            className="text-xs bg-emerald-500 text-white px-3 py-1 rounded shadow border border-emerald-600 hover:bg-emerald-600 transition"
           >
             Export Excel
           </button>
@@ -628,7 +645,7 @@ return (
         <table className="w-full table-fixed border-collapse text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left">
-              <SortTH className="w-[42%]" label="Area Manager" sortKey="area_manager"
+              <SortTH className="w-[50%]" label="Area Manager" sortKey="area_manager"
                 activeKey={areaSort?.key || ""}
                 dir={areaSort?.dir || "asc"}
                 onClick={() =>
@@ -638,8 +655,7 @@ return (
                   }))
                 }
               />
-              <SortTH
-                label="Total LRs"
+              <SortTH className="w-[8%]" label="Total LRs"
                 sortKey="totalGRs"
                 activeKey={areaSort?.key || ""}
                 dir={areaSort?.dir || "asc"}
@@ -649,10 +665,9 @@ return (
                     dir: s?.key === "totalGRs" && s.dir === "asc" ? "desc" : "asc",
                   }))
                 }
-                align="right"
+                
               />
-              <SortTH
-                label="Collected LRs"
+              <SortTH className="w-[8%]" label="Collected LRs"
                 sortKey="collectedGRs"
                 activeKey={areaSort?.key || ""}
                 dir={areaSort?.dir || "asc"}
@@ -662,11 +677,10 @@ return (
                     dir: s?.key === "collectedGRs" && s.dir === "asc" ? "desc" : "asc",
                   }))
                 }
-                align="right"
+                
               />
-              <th className="px-3 py-2 text-right">LR %</th>
-              <SortTH
-                label="Total Freight"
+              <SortTH className="w-[6%]" label="LR %" sortKey="lr_pct" activeKey={areaSort?.key || ""} dir={areaSort?.dir || "asc"} onClick={() => setAreaSort(s => ({ key: "lr_pct", dir: s?.key === "lr_pct" && s.dir === "asc" ? "desc" : "asc" }))} />
+              <SortTH className="w-[11%]" label="Total Freight"
                 sortKey="totalFreight"
                 activeKey={areaSort?.key || ""}
                 dir={areaSort?.dir || "asc"}
@@ -676,11 +690,10 @@ return (
                     dir: s?.key === "totalFreight" && s.dir === "asc" ? "desc" : "asc",
                   }))
                 }
-                align="right"
+                
               />
-              <th className="px-3 py-2 text-right">Amount %</th>
-              <SortTH
-                label="Balance"
+              <SortTH className="w-[6%]" label="Amount %" sortKey="amt_pct" activeKey={areaSort?.key || ""} dir={areaSort?.dir || "asc"} onClick={() => setAreaSort(s => ({ key: "amt_pct", dir: s?.key === "amt_pct" && s.dir === "asc" ? "desc" : "asc" }))} />
+              <SortTH className="w-[11%]" label="Balance"
                 sortKey="balance"
                 activeKey={areaSort?.key || ""}
                 dir={areaSort?.dir || "asc"}
@@ -690,7 +703,7 @@ return (
                     dir: s?.key === "balance" && s.dir === "asc" ? "desc" : "asc",
                   }))
                 }
-                align="right"
+                
               />
             </tr>
           </thead>
@@ -723,33 +736,10 @@ return (
       )}
     </div>
 
-    {/* Ageing */}
-    <div className="rounded border bg-white">
-      <div className="px-3 py-2 border-b font-semibold text-sm">Ageing (Outstanding)</div>
-      <table className="w-full table-fixed border-collapse text-sm">
-        <thead className="bg-gray-100">
-          <tr>
-            <th className="border px-2 py-1">Bucket</th>
-            <th className="border px-2 py-1 text-right">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {Object.entries(ageingRows.reduce((m: any, r) => { m[r.bucket] = (m[r.bucket]||0)+r.balance; return m; }, {})).map(
-            ([bucket, amt]) => (
-              <tr key={bucket}>
-                <td className="border px-2 py-1">{bucket} days</td>
-                <td className="border px-2 py-1 text-right">₹ {fmt(amt as number)}</td>
-              </tr>
-            )
-          )}
-        </tbody>
-      </table>
-    </div>
-
     {/* Party-wise */}
     <div className="rounded border bg-white">
             <div
-        className="flex items-center justify-between px-3 py-2 border-b font-semibold text-sm cursor-pointer"
+        className="flex items-center justify-between px-4 py-3 border-b font-bold text-sm cursor-pointer bg-slate-800 text-white rounded-t hover:bg-slate-700 transition"
         onClick={() => setPartyOpen((o) => !o)}
       >
         <span>Party-wise Outstanding</span>
@@ -770,7 +760,7 @@ return (
                 `Party_Outstanding_${fromDate}_to_${toDate}`
               );
             }}
-            className="text-xs bg-emerald-50 text-emerald-700 px-3 py-1 rounded shadow-sm border border-emerald-200 hover:bg-emerald-100 transition"
+            className="text-xs bg-emerald-500 text-white px-3 py-1 rounded shadow border border-emerald-600 hover:bg-emerald-600 transition"
           >
             Export Excel
           </button>
@@ -795,7 +785,7 @@ return (
           <table className="w-full table-fixed border-collapse text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left">
-              <SortTH className="w-[42%]" label="Party" sortKey="party_name"
+              <SortTH className="w-[52%]" label="Party" sortKey="party_name"
                 activeKey={partySort?.key || ""}
                 dir={partySort?.dir || "asc"}
                 onClick={() =>
@@ -805,8 +795,7 @@ return (
                   }))
                 }
               />
-              <SortTH
-                label="Total LRs"
+              <SortTH className="w-[8%]" label="Total LRs"
                 sortKey="total_grs"
                 activeKey={partySort?.key || ""}
                 dir={partySort?.dir || "asc"}
@@ -816,10 +805,9 @@ return (
                     dir: s?.key === "total_grs" && s.dir === "asc" ? "desc" : "asc",
                   }))
                 }
-                align="right"
+                
               />
-              <SortTH
-                label="Collected LRs"
+              <SortTH className="w-[8%]" label="Collected LRs"
                 sortKey="collected_grs"
                 activeKey={partySort?.key || ""}
                 dir={partySort?.dir || "asc"}
@@ -829,10 +817,9 @@ return (
                     dir: s?.key === "collected_grs" && s.dir === "asc" ? "desc" : "asc",
                   }))
                 }
-                align="right"
+                
               />
-              <SortTH
-                label="LR %"
+              <SortTH className="w-[6%]" label="LR %"
                 sortKey="lr_pct"
                 activeKey={partySort?.key || ""}
                 dir={partySort?.dir || "asc"}
@@ -842,10 +829,9 @@ return (
                     dir: s?.key === "lr_pct" && s.dir === "asc" ? "desc" : "asc",
                   }))
                 }
-                align="right"
+                
               />
-              <SortTH
-                label="Total Freight"
+              <SortTH className="w-[11%]" label="Total Freight"
                 sortKey="total_freight"
                 activeKey={partySort?.key || ""}
                 dir={partySort?.dir || "asc"}
@@ -855,10 +841,9 @@ return (
                     dir: s?.key === "total_freight" && s.dir === "asc" ? "desc" : "asc",
                   }))
                 }
-                align="right"
+                
               />
-              <SortTH
-                label="Amount %"
+              <SortTH className="w-[6%]" label="Amount %"
                 sortKey="amt_pct"
                 activeKey={partySort?.key || ""}
                 dir={partySort?.dir || "asc"}
@@ -868,10 +853,9 @@ return (
                     dir: s?.key === "amt_pct" && s.dir === "asc" ? "desc" : "asc",
                   }))
                 }
-                align="right"
+                
               />
-              <SortTH
-                label="Balance"
+              <SortTH className="w-[11%]" label="Balance"
                 sortKey="balance"
                 activeKey={partySort?.key || ""}
                 dir={partySort?.dir || "asc"}
@@ -881,7 +865,7 @@ return (
                     dir: s?.key === "balance" && s.dir === "asc" ? "desc" : "asc",
                   }))
                 }
-                align="right"
+                
               />
             </tr>
           </thead>
