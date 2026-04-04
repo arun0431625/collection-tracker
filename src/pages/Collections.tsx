@@ -5,6 +5,8 @@ import { useCollections } from "@/hooks/useCollections";
 import { CollectionRow } from "@/components/collections/CollectionRow";
 import { STATUS, StatusFilter } from "@/types/constants";
 import { GRRow } from "@/types/collections";
+import { fetchCollections } from "@/services/collections.api";
+import { toast } from "sonner";
 
 export default function Collections() {
   const {
@@ -76,31 +78,47 @@ export default function Collections() {
     }
   }
 
-  function exportExcel() {
-    const wb = XLSX.utils.book_new();
-    const data = rows.map((r) => {
-      const freight = r.total_freight || 0;
-      const received = r.received_amount || 0;
-      const capped = Math.min(received, freight);
+  async function exportExcel() {
+    const toastId = toast.loading("Fetching data for export...");
+    try {
+      const result = await fetchCollections({
+        branch: isAdmin ? selectedBranch || "" : branch || "",
+        role: role as "ADMIN" | "BRANCH",
+        page: 1,
+        pageSize: 1000000,
+        status: statusFilter,
+        search: search,
+        month: selectedMonth,
+      });
 
-      return {
-        GR_No: r.gr_no,
-        Date: r.gr_date,
-        Party: r.party_name,
-        Freight: freight,
-        Received: capped,
-        Balance: freight - capped,
-        Status: getStatus(r),
-        Payment_Mode: r.payment_mode || "",
-        Ref_No: r.ref_no || "",
-        Remarks: r.remarks || "",
-      };
-    });
+      const wb = XLSX.utils.book_new();
+      const data = result.rows.map((r: any) => {
+        const freight = r.total_freight || 0;
+        const received = r.received_amount || 0;
+        const capped = Math.min(received, freight);
 
-    const ws = XLSX.utils.json_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, "Collections");
-    const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-    saveAs(new Blob([buf]), `Collections_${branch}.xlsx`);
+        return {
+          GR_No: r.gr_no,
+          Date: r.gr_date,
+          Party: r.party_name,
+          Freight: freight,
+          Received: capped,
+          Balance: freight - capped,
+          Status: getStatus(r as GRRow),
+          Payment_Mode: r.payment_mode || "",
+          Ref_No: r.ref_no || "",
+          Remarks: r.remarks || "",
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      XLSX.utils.book_append_sheet(wb, ws, "Collections");
+      const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+      saveAs(new Blob([buf]), `Collections_${branch}.xlsx`);
+      toast.success("Export successful!", { id: toastId });
+    } catch (e) {
+      toast.error("Export failed.", { id: toastId });
+    }
   }
 
   return (

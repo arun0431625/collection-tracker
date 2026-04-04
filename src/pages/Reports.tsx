@@ -89,7 +89,19 @@ const PAGE_SIZE = 25;
 const [partySearch, setPartySearch] = useState("");
 const [debouncedPartySearch, setDebouncedPartySearch] = useState("");
 
-const fmt = (n: number) => n.toLocaleString("en-IN");
+function exportTable(data: any[], filename: string) {
+    if (!data || data.length === 0) {
+      alert("No data to export");
+      return;
+    }
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+    const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    saveAs(new Blob([buf]), filename + ".xlsx");
+  }
+
+  const fmt = (n: number) => n.toLocaleString("en-IN");
 const pct = (part: number, total: number) => {
   if (!total || total === 0) return "0%";
   return ((part / total) * 100).toFixed(1) + "%";
