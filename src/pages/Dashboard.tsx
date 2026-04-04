@@ -12,6 +12,7 @@ import {
   Legend,
 } from "recharts";
 import * as XLSX from "xlsx";
+import { useSessionStorageState } from "@/hooks/useSessionStorageState";
 
 /* ---------------- Types ---------------- */
 type KPI = {
@@ -31,7 +32,7 @@ type BranchTrackerRow = {
 type TrendRow = {
   report_date: string;
   daily_collected: number;
-  daily_freight: number;
+  daily_sales: number;
 };
 
 /* ---------------- Utils ---------------- */
@@ -62,13 +63,13 @@ export default function Dashboard() {
   const today = new Date();
 
   /* ================== GLOBAL KPI FILTER ================== */
-  const [fy, setFy] = useState(today.getFullYear());
-  const [fm, setFm] = useState(today.getMonth() + 1);
-  const [fd, setFd] = useState(1);
+  const [fy, setFy] = useSessionStorageState<number>("dash_fy", today.getFullYear());
+  const [fm, setFm] = useSessionStorageState<number>("dash_fm", today.getMonth() + 1);
+  const [fd, setFd] = useSessionStorageState<number>("dash_fd", 1);
 
-  const [ty, setTy] = useState(today.getFullYear());
-  const [tm, setTm] = useState(today.getMonth() + 1);
-  const [td, setTd] = useState(today.getDate());
+  const [ty, setTy] = useSessionStorageState<number>("dash_ty", today.getFullYear());
+  const [tm, setTm] = useSessionStorageState<number>("dash_tm", today.getMonth() + 1);
+  const [td, setTd] = useSessionStorageState<number>("dash_td", today.getDate());
 
   const [range, setRange] = useState<{ from: string; to: string } | null>(null);
   const [error, setError] = useState("");
@@ -150,7 +151,8 @@ export default function Dashboard() {
         if (!resTrend.error && resTrend.data) {
           const filledData: TrendRow[] = [];
           const today = new Date();
-          const dbDataMap = new Map(resTrend.data.map((r: any) => [r.report_date, r]));
+          const resTrendData = resTrend.data as any[];
+          const dbDataMap = new Map<string, any>(resTrendData.map((r: any) => [r.report_date, r]));
 
           for (let i = trendDays - 1; i >= 0; i--) {
             const d = new Date(today);
@@ -161,15 +163,16 @@ export default function Dashboard() {
             filledData.push({
               report_date: isoDate,
               daily_collected: existing ? Number(existing.daily_collected) : 0,
-              daily_freight: existing ? Number(existing.daily_freight) : 0,
+              daily_sales: existing ? Number(existing.daily_sales) : 0,
             });
           }
           setTrendData(filledData);
         }
 
-        if (!resTracker.error && resTracker.data) {
+        if (resTracker.data) {
+           const trackerDataRows = resTracker.data as any[];
            setTrackerData(
-             resTracker.data.map((r: any) => ({
+             trackerDataRows.map((r: any) => ({
                ...r,
                total_grs: Number(r.total_grs),
                collections_handled: Number(r.collections_handled),
@@ -390,6 +393,10 @@ export default function Dashboard() {
                     <stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
                     <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                   </linearGradient>
+                  <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                 <XAxis
@@ -408,20 +415,18 @@ export default function Dashboard() {
                 />
                 <Tooltip
                   cursor={{ stroke: "#9CA3AF" }}
-                  contentStyle={{ borderRadius: "8px", border: "1px solid #E5E7EB", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
+                  contentStyle={{
+                    borderRadius: "12px",
+                    border: "none",
+                    boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
+                  }}
                   labelFormatter={formatDateLabel}
-                  formatter={(val: number, name: string) => [`₹ ${val.toLocaleString("en-IN")}`, name]}
+                  formatter={(val: number, name: string) => [
+                    formatINR(val),
+                    name === "daily_collected" ? "Total Collections" : "Total Sales",
+                  ]}
                 />
                 <Legend verticalAlign="top" height={36} iconType="circle" />
-                <Area
-                  type="monotone"
-                  dataKey="daily_freight"
-                  name="Daily Freight"
-                  stroke="#3b82f6"
-                  strokeWidth={2}
-                  fillOpacity={0}
-                  fill="none"
-                />
                 <Area
                   type="monotone"
                   dataKey="daily_collected"
@@ -430,6 +435,15 @@ export default function Dashboard() {
                   strokeWidth={3}
                   fillOpacity={1}
                   fill="url(#colorCollected)"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="daily_sales"
+                  name="Daily Total Sales"
+                  stroke="#3b82f6"
+                  strokeWidth={3}
+                  fillOpacity={1}
+                  fill="url(#colorSales)"
                 />
               </AreaChart>
             </ResponsiveContainer>
