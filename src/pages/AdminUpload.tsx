@@ -422,6 +422,14 @@ export default function AdminUpload() {
         return;
       }
 
+      const validModes = ["Cash", "Online", "Cheque", "NEFT", "RTGS", "UPI"];
+      const invalidRows = updates.filter(u => !validModes.includes(u.payment_mode));
+      if (invalidRows.length > 0) {
+          toast.error(`Found invalid payment mode: "${invalidRows[0].payment_mode}" at GR No: ${invalidRows[0].gr_no}. Allowed: Cash, Online, Cheque, NEFT, RTGS, UPI.`);
+          setIsInserting(false);
+          return;
+      }
+
       setInsertTotal(updates.length);
       setInsertProgress(0);
 
