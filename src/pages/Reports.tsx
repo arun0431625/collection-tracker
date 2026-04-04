@@ -37,7 +37,8 @@ balance: number;
 };
 
 type PartyRow = {
-party_name: string;\n  branches?: string;
+party_name: string;
+  branches?: string;
 total_grs: number;
 collected_grs: number;
 total_freight: number;
@@ -749,7 +750,8 @@ return (
               e.stopPropagation();
               exportTable(
                 partyRows.map((r) => ({
-                  Party: r.party_name,\n                  Branches: r.branches || "-",\n
+                  Party: r.party_name,
+                  Branches: r.branches || "-",
                   "Total LRs": r.total_grs,
                   "Collected LRs": r.collected_grs,
                   Freight: r.total_freight,
@@ -872,7 +874,8 @@ return (
           <tbody>
             {pagedPartyRows.map((r) => (
               <tr key={r.party_name}>
-                <td className="border px-2 py-1 break-words">{r.party_name}</td>\n                <td className="border px-2 text-xs py-1 text-center truncate">{r.branches || "-"}</td>
+                <td className="border px-2 py-1 break-words">{r.party_name}</td>
+                <td className="border px-2 text-xs py-1 text-center truncate">{r.branches || "-"}</td>
                 <td className="border px-2 py-1 text-right">{r.total_grs}</td>
                 <td className="border px-2 py-1 text-right">{r.collected_grs}</td>
                 <td className="border px-2 py-1 text-right">{pct(r.collected_grs, r.total_grs)}</td>
