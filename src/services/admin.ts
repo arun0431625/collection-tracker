@@ -26,6 +26,7 @@ export type SecurityRow = {
   area_manager: string | null;
   is_active: boolean;
   password_changed_at: string | null;
+  username?: string;
 };
 
 export type BranchDeleteSummary = {
@@ -142,6 +143,17 @@ export async function upsertCollections(rows: UploadRow[]) {
 export async function updateCollectionFields(rows: CollectionFieldUpdateRow[]) {
   const { error } = await supabase.rpc("admin_update_collection_fields", {
     p_rows: rows,
+  });
+
+  if (error) {
+    throw new Error(getErrorMessage(error));
+  }
+}
+
+export async function updateBranchUsername(branchCode: string, newUsername: string) {
+  const { error } = await supabase.rpc("admin_change_branch_username", {
+    p_branch_code: branchCode,
+    p_new_username: newUsername,
   });
 
   if (error) {

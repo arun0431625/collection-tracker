@@ -8,6 +8,7 @@ import {
   deleteBranch,
   resetBranchPassword,
   setBranchActive,
+  updateBranchUsername,
 } from "@/services/admin";
 
 type UserRow = Awaited<ReturnType<typeof fetchSecurityRows>>[number];
@@ -27,6 +28,11 @@ export default function Security() {
   } | null>(null);
   const [branchOptions, setBranchOptions] = useState<string[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
+
+  // Username Editing State
+  const [editingRow, setEditingRow] = useState<string | null>(null);
+  const [editUsernameVal, setEditUsernameVal] = useState("");
+  const [savingUsername, setSavingUsername] = useState(false);
 
   const totalBranches = rows.length;
   const activeCount = rows.filter((r) => r.is_active).length;
@@ -143,6 +149,26 @@ export default function Security() {
     }
   }
 
+  async function handleSaveUsername(branchCode: string) {
+    const val = editUsernameVal.trim().toUpperCase();
+    if (!val) {
+      alert("Username cannot be empty");
+      return;
+    }
+    setSavingUsername(true);
+    try {
+      await updateBranchUsername(branchCode, val);
+      setRows((prev) =>
+        prev.map((r) => (r.branch_code === branchCode ? { ...r, username: val } : r))
+      );
+      setEditingRow(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to update username");
+    } finally {
+      setSavingUsername(false);
+    }
+  }
+
   function getPasswordStatus(row: UserRow) {
     return row.password_changed_at ? "Custom password set" : "Temporary password active";
   }
@@ -151,7 +177,7 @@ export default function Security() {
     const data = rows.map((row) => ({
       Branch: row.branch_code,
       Area_Manager: row.area_manager || "",
-      Username: row.branch_code,
+      Username: row.username || row.branch_code,
       Status: row.is_active ? "Active" : "Disabled",
       Password_Status: getPasswordStatus(row),
     }));
@@ -344,7 +370,46 @@ export default function Security() {
               >
                 <td className="px-4 py-3">{row.branch_code}</td>
                 <td className="px-4 py-3">{row.area_manager || "-"}</td>
-                <td className="px-4 py-3">{row.branch_code}</td>
+                <td className="px-4 py-3">
+                  {editingRow === row.branch_code ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={editUsernameVal}
+                        onChange={(e) => setEditUsernameVal(e.target.value)}
+                        className="w-28 border border-blue-400 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-blue-500 uppercase"
+                        disabled={savingUsername}
+                      />
+                      <button
+                        onClick={() => void handleSaveUsername(row.branch_code)}
+                        disabled={savingUsername}
+                        className="text-xs font-medium text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-2 py-1 rounded transition"
+                      >
+                        {savingUsername ? "Saving.." : "Save"}
+                      </button>
+                      <button
+                        onClick={() => setEditingRow(null)}
+                        disabled={savingUsername}
+                        className="text-xs font-medium text-slate-500 hover:bg-slate-100 px-2 py-1 rounded transition"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold">{row.username || row.branch_code}</span>
+                      <button
+                        onClick={() => {
+                          setEditingRow(row.branch_code);
+                          setEditUsernameVal(row.username || row.branch_code);
+                        }}
+                        className="opacity-60 hover:opacity-100 transition whitespace-nowrap text-xs text-blue-600 underline"
+                      >
+                        Edit Alias
+                      </button>
+                    </div>
+                  )}
+                </td>
 
                 <td className="px-4 py-3 text-center">
                   <span
