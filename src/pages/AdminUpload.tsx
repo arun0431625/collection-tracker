@@ -103,14 +103,13 @@ function parseUploadRow(r: any): UploadRow | null {
 function buildCollectionFieldUpdates(rawRows: any[]) {
   const updates: CollectionFieldUpdateRow[] = [];
   rawRows.forEach((row) => {
-    let paymentMode = String(row["Payment Mode"] || "").trim();
-    const pmUpper = paymentMode.toUpperCase();
-    if (pmUpper === "CASH") paymentMode = "Cash";
-    else if (pmUpper === "ONLINE") paymentMode = "Online";
-    else if (pmUpper === "CHEQUE") paymentMode = "Cheque";
-    else if (pmUpper === "NEFT") paymentMode = "NEFT";
-    else if (pmUpper === "RTGS") paymentMode = "RTGS";
-    else if (pmUpper === "UPI") paymentMode = "UPI";
+    let paymentMode = String(row["Payment Mode"] || "").trim().toUpperCase();
+    
+    if (paymentMode === "CASH") {
+        paymentMode = "CASH";
+    } else if (["BANK", "ONLINE", "CHEQUE", "NEFT", "RTGS", "UPI", "TRANSFER", "IMPS"].includes(paymentMode)) {
+        paymentMode = "BANK";
+    }
 
     const receivedAmount = parseFreight(row["Received"]);
     const paymentDate = excelDateToISO(row["Payment Date"]);
@@ -422,10 +421,10 @@ export default function AdminUpload() {
         return;
       }
 
-      const validModes = ["Cash", "Online", "Cheque", "NEFT", "RTGS", "UPI"];
+      const validModes = ["CASH", "BANK"];
       const invalidRows = updates.filter(u => !validModes.includes(u.payment_mode));
       if (invalidRows.length > 0) {
-          toast.error(`Found invalid payment mode: "${invalidRows[0].payment_mode}" at GR No: ${invalidRows[0].gr_no}. Allowed: Cash, Online, Cheque, NEFT, RTGS, UPI.`);
+          toast.error(`Found invalid payment mode value in Excel: "${invalidRows[0].payment_mode}" at GR No: ${invalidRows[0].gr_no}. Allowed mapping types: Cash, Online, Cheque, NEFT, RTGS, UPI...`);
           setIsInserting(false);
           return;
       }
@@ -445,7 +444,7 @@ export default function AdminUpload() {
         } catch (chunkErr) {
           const errMsg = chunkErr instanceof Error ? chunkErr.message : "Unknown error";
           if (errMsg.includes("payment_mode_check")) {
-            toast.error(`Payment Mode value invalid! Allowed: Cash, Online, Cheque, NEFT, RTGS, UPI. Failed at batch starting row ${i + 1}.`);
+            toast.error(`Payment Mode constraint error! The database only accepts CASH or BANK. Check row ${i + 1}.`);
           } else {
             toast.error(`Batch error at rows ${i + 1}-${i + chunk.length}: ${errMsg}`);
           }
