@@ -298,19 +298,27 @@ function sortData<T extends Record<string, any>>(
 
     // 🔹 Virtual % columns support
     if (key === "lr_pct") {
-      av = a.total_grs ? a.collected_grs / a.total_grs : 0;
-      bv = b.total_grs ? b.collected_grs / b.total_grs : 0;
+      const aT = a.total_grs ?? a.totalGRs ?? 0;
+      const aC = a.collected_grs ?? a.collectedGRs ?? 0;
+      av = aT ? aC / aT : 0;
+      const bT = b.total_grs ?? b.totalGRs ?? 0;
+      const bC = b.collected_grs ?? b.collectedGRs ?? 0;
+      bv = bT ? bC / bT : 0;
     }
 
     if (key === "amt_pct") {
-      av = a.total_freight ? a.collected / a.total_freight : 0;
-      bv = b.total_freight ? b.collected / b.total_freight : 0;
+      const aF = a.total_freight ?? a.totalFreight ?? 0;
+      av = aF ? (a.collected || 0) / aF : 0;
+      const bF = b.total_freight ?? b.totalFreight ?? 0;
+      bv = bF ? (b.collected || 0) / bF : 0;
     }
 
     // 🔹 Balance virtual column
     if (key === "balance") {
-      av = (a.total_freight || 0) - (a.collected || 0);
-      bv = (b.total_freight || 0) - (b.collected || 0);
+      const aF2 = a.total_freight ?? a.totalFreight ?? 0;
+      av = aF2 - (a.collected || 0);
+      const bF2 = b.total_freight ?? b.totalFreight ?? 0;
+      bv = bF2 - (b.collected || 0);
     }
 
     if (av == null && bv == null) return 0;
@@ -444,7 +452,7 @@ return (
         <table className="w-full table-fixed border-collapse text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left">
-              <SortTH className="w-[40%]" label="Branch" sortKey="branch_code"
+              <SortTH className="w-[42%]" label="Branch" sortKey="branch_code"
                 activeKey={branchSort?.key || ""}
                 dir={branchSort?.dir || "asc"}
                 onClick={() =>
@@ -620,7 +628,7 @@ return (
         <table className="w-full table-fixed border-collapse text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left">
-              <SortTH className="w-[40%]" label="Area Manager" sortKey="area_manager"
+              <SortTH className="w-[42%]" label="Area Manager" sortKey="area_manager"
                 activeKey={areaSort?.key || ""}
                 dir={areaSort?.dir || "asc"}
                 onClick={() =>
@@ -787,7 +795,7 @@ return (
           <table className="w-full table-fixed border-collapse text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left">
-              <SortTH className="w-[45%]" label="Party" sortKey="party_name"
+              <SortTH className="w-[42%]" label="Party" sortKey="party_name"
                 activeKey={partySort?.key || ""}
                 dir={partySort?.dir || "asc"}
                 onClick={() =>
