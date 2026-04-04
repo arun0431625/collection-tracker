@@ -424,7 +424,7 @@ export default function Dashboard() {
                   labelFormatter={formatDateLabel}
                   formatter={(val: any, name: string) => [
                     formatINR(Number(val) || 0),
-                    name === "daily_collected" ? "Total Collections" : "Total Sales",
+                    name,
                   ]}
                 />
                 <Legend verticalAlign="top" height={36} iconType="circle" />
