@@ -444,9 +444,7 @@ return (
         <table className="w-full table-fixed border-collapse text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left">
-              <SortTH
-                label="Branch"
-                sortKey="branch_code"
+              <SortTH className="w-[40%]" label="Branch" sortKey="branch_code"
                 activeKey={branchSort?.key || ""}
                 dir={branchSort?.dir || "asc"}
                 onClick={() =>
@@ -622,9 +620,7 @@ return (
         <table className="w-full table-fixed border-collapse text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left">
-              <SortTH
-                label="Area Manager"
-                sortKey="area_manager"
+              <SortTH className="w-[40%]" label="Area Manager" sortKey="area_manager"
                 activeKey={areaSort?.key || ""}
                 dir={areaSort?.dir || "asc"}
                 onClick={() =>
@@ -791,9 +787,7 @@ return (
           <table className="w-full table-fixed border-collapse text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left">
-              <SortTH
-                label="Party"
-                sortKey="party_name"
+              <SortTH className="w-[45%]" label="Party" sortKey="party_name"
                 activeKey={partySort?.key || ""}
                 dir={partySort?.dir || "asc"}
                 onClick={() =>
