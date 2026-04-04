@@ -79,20 +79,30 @@ export default function Collections() {
   }
 
   async function exportExcel() {
-    const toastId = toast.loading("Fetching data for export...");
+    const toastId = toast.loading("Fetching all data for export...");
     try {
-      const result = await fetchCollections({
-        branch: isAdmin ? selectedBranch || "" : branch || "",
-        role: role as "ADMIN" | "BRANCH",
-        page: 1,
-        pageSize: 1000000,
-        status: statusFilter,
-        search: search,
-        month: selectedMonth,
-      });
+      // Paginate through ALL pages to get every row
+      let allRows: any[] = [];
+      let page = 1;
+      const chunkSize = 1000;
+      while (true) {
+        const result = await fetchCollections({
+          branch: isAdmin ? selectedBranch || "" : branch || "",
+          role: role as "ADMIN" | "BRANCH",
+          page,
+          pageSize: chunkSize,
+          status: statusFilter,
+          search: search,
+          month: selectedMonth,
+        });
+        allRows = allRows.concat(result.rows);
+        toast.loading(`Fetched ${allRows.length} of ${result.totalCount} rows...`, { id: toastId });
+        if (allRows.length >= result.totalCount || result.rows.length < chunkSize) break;
+        page++;
+      }
 
       const wb = XLSX.utils.book_new();
-      const data = result.rows.map((r: any) => {
+      const data = allRows.map((r: any) => {
         const freight = r.total_freight || 0;
         const received = r.received_amount || 0;
         const capped = Math.min(received, freight);
@@ -115,7 +125,7 @@ export default function Collections() {
       XLSX.utils.book_append_sheet(wb, ws, "Collections");
       const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
       saveAs(new Blob([buf]), `Collections_${branch}.xlsx`);
-      toast.success("Export successful!", { id: toastId });
+      toast.success(`Export successful! ${allRows.length} rows exported.`, { id: toastId });
     } catch (e) {
       toast.error("Export failed.", { id: toastId });
     }

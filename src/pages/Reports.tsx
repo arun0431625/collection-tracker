@@ -476,7 +476,7 @@ return (
         <table className="w-full table-fixed border-collapse text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left">
-              <SortTH width="50%" label="Branch" sortKey="branch_code"
+              <SortTH width="40%" label="Branch" sortKey="branch_code"
                 activeKey={branchSort?.key || ""}
                 dir={branchSort?.dir || "asc"}
                 onClick={() =>
@@ -486,7 +486,7 @@ return (
                   }))
                 }
               />
-              <SortTH width="8%" label="Total LRs"
+              <SortTH width="7%" label="Total LRs"
                 sortKey="total_grs"
                 activeKey={branchSort?.key || ""}
                 dir={branchSort?.dir || "asc"}
@@ -498,7 +498,7 @@ return (
                 }
                 
               />
-              <SortTH width="8%" label="Collected LRs"
+              <SortTH width="7%" label="Coll. LRs"
                 sortKey="collected_grs"
                 activeKey={branchSort?.key || ""}
                 dir={branchSort?.dir || "asc"}
@@ -510,7 +510,7 @@ return (
                 }
                 
               />
-              <SortTH width="6%" label="LR %"
+              <SortTH width="5%" label="LR %"
                 sortKey="lr_pct"
                 activeKey={branchSort?.key || ""}
                 dir={branchSort?.dir || "asc"}
@@ -522,7 +522,7 @@ return (
                 }
                 
               />
-              <SortTH width="11%" label="Total Freight"
+              <SortTH width="14%" label="Total Freight"
                 sortKey="total_freight"
                 activeKey={branchSort?.key || ""}
                 dir={branchSort?.dir || "asc"}
@@ -534,7 +534,7 @@ return (
                 }
                 
               />
-              <SortTH width="6%" label="Amount %"
+              <SortTH width="5%" label="Amt %"
                 sortKey="amt_pct"
                 activeKey={branchSort?.key || ""}
                 dir={branchSort?.dir || "asc"}
@@ -546,7 +546,7 @@ return (
                 }
                 
               />
-              <SortTH width="11%" label="Balance"
+              <SortTH width="14%" label="Balance"
                 sortKey="balance"
                 activeKey={branchSort?.key || ""}
                 dir={branchSort?.dir || "asc"}
@@ -646,7 +646,7 @@ return (
         <table className="w-full table-fixed border-collapse text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left">
-              <SortTH width="50%" label="Area Manager" sortKey="area_manager"
+              <SortTH width="40%" label="Area Manager" sortKey="area_manager"
                 activeKey={areaSort?.key || ""}
                 dir={areaSort?.dir || "asc"}
                 onClick={() =>
@@ -656,7 +656,7 @@ return (
                   }))
                 }
               />
-              <SortTH width="8%" label="Total LRs"
+              <SortTH width="7%" label="Total LRs"
                 sortKey="totalGRs"
                 activeKey={areaSort?.key || ""}
                 dir={areaSort?.dir || "asc"}
@@ -668,7 +668,7 @@ return (
                 }
                 
               />
-              <SortTH width="8%" label="Collected LRs"
+              <SortTH width="7%" label="Coll. LRs"
                 sortKey="collectedGRs"
                 activeKey={areaSort?.key || ""}
                 dir={areaSort?.dir || "asc"}
@@ -680,8 +680,8 @@ return (
                 }
                 
               />
-              <SortTH width="6%" label="LR %" sortKey="lr_pct" activeKey={areaSort?.key || ""} dir={areaSort?.dir || "asc"} onClick={() => setAreaSort(s => ({ key: "lr_pct", dir: s?.key === "lr_pct" && s.dir === "asc" ? "desc" : "asc" }))} />
-              <SortTH width="11%" label="Total Freight"
+              <SortTH width="5%" label="LR %" sortKey="lr_pct" activeKey={areaSort?.key || ""} dir={areaSort?.dir || "asc"} onClick={() => setAreaSort(s => ({ key: "lr_pct", dir: s?.key === "lr_pct" && s.dir === "asc" ? "desc" : "asc" }))} />
+              <SortTH width="14%" label="Total Freight"
                 sortKey="totalFreight"
                 activeKey={areaSort?.key || ""}
                 dir={areaSort?.dir || "asc"}
@@ -693,8 +693,8 @@ return (
                 }
                 
               />
-              <SortTH width="6%" label="Amount %" sortKey="amt_pct" activeKey={areaSort?.key || ""} dir={areaSort?.dir || "asc"} onClick={() => setAreaSort(s => ({ key: "amt_pct", dir: s?.key === "amt_pct" && s.dir === "asc" ? "desc" : "asc" }))} />
-              <SortTH width="11%" label="Balance"
+              <SortTH width="5%" label="Amt %" sortKey="amt_pct" activeKey={areaSort?.key || ""} dir={areaSort?.dir || "asc"} onClick={() => setAreaSort(s => ({ key: "amt_pct", dir: s?.key === "amt_pct" && s.dir === "asc" ? "desc" : "asc" }))} />
+              <SortTH width="14%" label="Balance"
                 sortKey="balance"
                 activeKey={areaSort?.key || ""}
                 dir={areaSort?.dir || "asc"}
@@ -787,7 +787,7 @@ return (
           <table className="w-full table-fixed border-collapse text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left">
-              <SortTH width="30%" label="Party" sortKey="party_name"
+              <SortTH width="25%" label="Party" sortKey="party_name"
                 activeKey={partySort?.key || ""}
                 dir={partySort?.dir || "asc"}
                 onClick={() =>
@@ -797,7 +797,7 @@ return (
                   }))
                 }
               />
-              <SortTH width="15%" label="Branches" sortKey="branches"
+              <SortTH width="15%" label="Branch" sortKey="branches"
                 activeKey={partySort?.key || ""}
                 dir={partySort?.dir || "asc"}
                 onClick={() =>
@@ -807,7 +807,7 @@ return (
                   }))
                 }
               />
-              <SortTH width="8%" label="Total LRs"
+              <SortTH width="7%" label="Total LRs"
                 sortKey="total_grs"
                 activeKey={partySort?.key || ""}
                 dir={partySort?.dir || "asc"}
@@ -819,7 +819,7 @@ return (
                 }
                 
               />
-              <SortTH width="8%" label="Collected LRs"
+              <SortTH width="7%" label="Coll. LRs"
                 sortKey="collected_grs"
                 activeKey={partySort?.key || ""}
                 dir={partySort?.dir || "asc"}
@@ -831,7 +831,7 @@ return (
                 }
                 
               />
-              <SortTH width="6%" label="LR %"
+              <SortTH width="5%" label="LR %"
                 sortKey="lr_pct"
                 activeKey={partySort?.key || ""}
                 dir={partySort?.dir || "asc"}
@@ -843,7 +843,7 @@ return (
                 }
                 
               />
-              <SortTH width="11%" label="Total Freight"
+              <SortTH width="14%" label="Total Freight"
                 sortKey="total_freight"
                 activeKey={partySort?.key || ""}
                 dir={partySort?.dir || "asc"}
@@ -855,7 +855,7 @@ return (
                 }
                 
               />
-              <SortTH width="6%" label="Amount %"
+              <SortTH width="5%" label="Amt %"
                 sortKey="amt_pct"
                 activeKey={partySort?.key || ""}
                 dir={partySort?.dir || "asc"}
@@ -867,7 +867,7 @@ return (
                 }
                 
               />
-              <SortTH width="11%" label="Balance"
+              <SortTH width="14%" label="Balance"
                 sortKey="balance"
                 activeKey={partySort?.key || ""}
                 dir={partySort?.dir || "asc"}
@@ -931,24 +931,23 @@ function SortTH({
   activeKey,
   dir,
   onClick,
-  align = "left",
+  width,
 }: {
   label: string;
   sortKey: string;
   activeKey: string;
   dir: "asc" | "desc";
   onClick: () => void;
-  align?: "left" | "right";
+  width?: string;
 }) {
   const isActive = sortKey === activeKey;
   return (
     <th
       onClick={onClick}
-      className={`px-3 py-2 cursor-pointer select-none border-b hover:bg-gray-100 ${
-        align === "right" ? "text-right" : "text-left"
-      }`}
+      style={width ? { width } : undefined}
+      className="px-2 py-2 cursor-pointer select-none border-b hover:bg-gray-100 text-center align-middle whitespace-nowrap"
     >
-      <span className={`inline-flex items-center gap-1 ${align === "right" ? "justify-end w-full" : ""}`}>
+      <span className="inline-flex items-center justify-center w-full gap-1">
         {label}
         {isActive && (
           <span className="text-xs text-gray-500">{dir === "asc" ? "▲" : "▼"}</span>
