@@ -8,16 +8,16 @@ RETURNS TABLE (
 BEGIN
     RETURN QUERY
     SELECT 
-        NULLIF(payment_date, '')::DATE as report_date,
+        payment_date as report_date,
         SUM(LEAST(COALESCE(received_amount, 0), total_freight)) as daily_collected,
         SUM(total_freight) as daily_freight
     FROM collections_lrs
     WHERE 
-        NULLIF(payment_date, '') IS NOT NULL 
-        AND NULLIF(payment_date, '')::DATE >= CURRENT_DATE - (p_days || ' days')::INTERVAL
+        payment_date IS NOT NULL 
+        AND payment_date >= CURRENT_DATE - (p_days || ' days')::INTERVAL
         AND (p_branch IS NULL OR branch_code = p_branch)
-    GROUP BY NULLIF(payment_date, '')::DATE
-    ORDER BY NULLIF(payment_date, '')::DATE ASC;
+    GROUP BY payment_date
+    ORDER BY payment_date ASC;
 END;
 $$ LANGUAGE plpgsql;
 

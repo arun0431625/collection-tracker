@@ -148,13 +148,23 @@ export default function Dashboard() {
         ]);
 
         if (!resTrend.error && resTrend.data) {
-          setTrendData(
-            resTrend.data.map((r: any) => ({
-              ...r,
-              daily_collected: Number(r.daily_collected),
-              daily_freight: Number(r.daily_freight),
-            }))
-          );
+          const filledData: TrendRow[] = [];
+          const today = new Date();
+          const dbDataMap = new Map(resTrend.data.map((r: any) => [r.report_date, r]));
+
+          for (let i = trendDays - 1; i >= 0; i--) {
+            const d = new Date(today);
+            d.setDate(d.getDate() - i);
+            const isoDate = toISO(d.getFullYear(), d.getMonth() + 1, d.getDate());
+
+            const existing = dbDataMap.get(isoDate);
+            filledData.push({
+              report_date: isoDate,
+              daily_collected: existing ? Number(existing.daily_collected) : 0,
+              daily_freight: existing ? Number(existing.daily_freight) : 0,
+            });
+          }
+          setTrendData(filledData);
         }
 
         if (!resTracker.error && resTracker.data) {
@@ -400,9 +410,18 @@ export default function Dashboard() {
                   cursor={{ stroke: "#9CA3AF" }}
                   contentStyle={{ borderRadius: "8px", border: "1px solid #E5E7EB", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
                   labelFormatter={formatDateLabel}
-                  formatter={(val: number) => [`₹ ${val.toLocaleString("en-IN")}`, "Collected"]}
+                  formatter={(val: number, name: string) => [`₹ ${val.toLocaleString("en-IN")}`, name]}
                 />
                 <Legend verticalAlign="top" height={36} iconType="circle" />
+                <Area
+                  type="monotone"
+                  dataKey="daily_freight"
+                  name="Daily Freight"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  fillOpacity={0}
+                  fill="none"
+                />
                 <Area
                   type="monotone"
                   dataKey="daily_collected"
