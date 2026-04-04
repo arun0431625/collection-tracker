@@ -16,9 +16,9 @@ BEGIN
     SELECT 
         c.branch_code,
         COUNT(c.gr_no) as total_grs,
-        COUNT(CASE WHEN LEAST(c.received_amount, c.total_freight) >= c.total_freight AND c.total_freight > 0 THEN 1 END) as collected_grs,
+        COUNT(CASE WHEN LEAST(COALESCE(c.received_amount, 0), c.total_freight) >= c.total_freight AND c.total_freight > 0 THEN 1 END) as collected_grs,
         COALESCE(SUM(c.total_freight), 0) as total_freight,
-        COALESCE(SUM(LEAST(c.received_amount, c.total_freight)), 0) as collected
+        COALESCE(SUM(LEAST(COALESCE(c.received_amount, 0), c.total_freight)), 0) as collected
     FROM collections_lrs c
     WHERE c.gr_date >= p_from_date 
       AND c.gr_date <= p_to_date
@@ -45,9 +45,9 @@ BEGIN
     SELECT 
         COALESCE(NULLIF(c.area_manager, ''), 'UNKNOWN') as area_manager,
         COUNT(c.gr_no) as "totalGRs",
-        COUNT(CASE WHEN LEAST(c.received_amount, c.total_freight) >= c.total_freight AND c.total_freight > 0 THEN 1 END) as "collectedGRs",
+        COUNT(CASE WHEN LEAST(COALESCE(c.received_amount, 0), c.total_freight) >= c.total_freight AND c.total_freight > 0 THEN 1 END) as "collectedGRs",
         COALESCE(SUM(c.total_freight), 0) as "totalFreight",
-        COALESCE(SUM(LEAST(c.received_amount, c.total_freight)), 0) as collected
+        COALESCE(SUM(LEAST(COALESCE(c.received_amount, 0), c.total_freight)), 0) as collected
     FROM collections_lrs c
     WHERE c.gr_date >= p_from_date 
       AND c.gr_date <= p_to_date

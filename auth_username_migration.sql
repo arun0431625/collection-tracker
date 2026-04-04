@@ -9,13 +9,13 @@ WHERE username IS NULL;
 ALTER TABLE public.branches ALTER COLUMN username SET NOT NULL;
 ALTER TABLE public.branches ADD CONSTRAINT unique_branch_username UNIQUE (username);
 
--- 2. Update branch_email to map from username instead of branch_code
-CREATE OR REPLACE FUNCTION public.branch_email(p_identifier text)
+-- 2. Update branch_email (keeping parameter name p_branch_code to avoid Postgres drop errors, but it will accept either branch_code or username)
+CREATE OR REPLACE FUNCTION public.branch_email(p_branch_code text)
 RETURNS text
 LANGUAGE sql
 IMMUTABLE
 AS $$
-  SELECT lower(trim(p_identifier)) || '@tracker.com';
+  SELECT lower(trim(p_branch_code)) || '@tracker.com';
 $$;
 
 -- 3. Update get_current_branch_profile to match by username
@@ -185,6 +185,7 @@ END;
 $$;
 
 -- 8. Return username in admin_list_branch_security_rows
+DROP FUNCTION IF EXISTS public.admin_list_branch_security_rows();
 CREATE OR REPLACE FUNCTION public.admin_list_branch_security_rows()
 RETURNS table (
   id text,

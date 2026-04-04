@@ -410,12 +410,34 @@ return (
 
     {/* Branch-wise */}
     <div className="rounded border bg-white">
-      <div
-        className="px-3 py-2 border-b font-semibold text-sm cursor-pointer flex justify-between"
+            <div
+        className="px-3 py-2 border-b font-semibold text-sm cursor-pointer flex justify-between items-center"
         onClick={() => setBranchOpen((o) => !o)}
       >
-        Branch-wise Outstanding
-        <span>{branchOpen ? "▲" : "▼"}</span>
+        <span>Branch-wise Outstanding</span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              exportTable(
+                summaryRows.map((r) => ({
+                  Branch: r.branch_code,
+                  "Total LRs": r.total_grs,
+                  "Collected LRs": r.collected_grs,
+                  Freight: r.total_freight,
+                  Collected: r.collected,
+                  Balance: r.total_freight - r.collected,
+                  "Collection %": pct(r.collected, r.total_freight),
+                })),
+                `Branch_Outstanding_${fromDate}_to_${toDate}`
+              );
+            }}
+            className="text-xs bg-emerald-50 text-emerald-700 px-3 py-1 rounded shadow-sm border border-emerald-200 hover:bg-emerald-100 transition"
+          >
+            Export Excel
+          </button>
+          <span>{branchOpen ? "▲" : "▼"}</span>
+        </div>
       </div>
 
       {branchOpen && (
@@ -566,12 +588,34 @@ return (
 
     {/* Area Manager */}
     <div className="rounded border bg-white">
-      <div
-        className="px-3 py-2 border-b font-semibold text-sm cursor-pointer flex justify-between"
+            <div
+        className="px-3 py-2 border-b font-semibold text-sm cursor-pointer flex justify-between items-center"
         onClick={() => setAreaOpen((o) => !o)}
       >
-        Area Manager-wise Outstanding
-        <span>{areaOpen ? "▲" : "▼"}</span>
+        <span>Area Manager-wise Outstanding</span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              exportTable(
+                areaRows.map((r) => ({
+                  "Area Manager": r.area_manager || "UNKNOWN",
+                  "Total LRs": r.totalGRs,
+                  "Collected LRs": r.collectedGRs,
+                  Freight: r.totalFreight,
+                  Collected: r.collected,
+                  Balance: r.balance,
+                  "Collection %": pct(r.collected, r.totalFreight),
+                })),
+                `Area_Outstanding_${fromDate}_to_${toDate}`
+              );
+            }}
+            className="text-xs bg-emerald-50 text-emerald-700 px-3 py-1 rounded shadow-sm border border-emerald-200 hover:bg-emerald-100 transition"
+          >
+            Export Excel
+          </button>
+          <span>{areaOpen ? "▲" : "▼"}</span>
+        </div>
       </div>
 
       {areaOpen && (
@@ -700,12 +744,34 @@ return (
 
     {/* Party-wise */}
     <div className="rounded border bg-white">
-      <div
+            <div
         className="flex items-center justify-between px-3 py-2 border-b font-semibold text-sm cursor-pointer"
         onClick={() => setPartyOpen((o) => !o)}
       >
         <span>Party-wise Outstanding</span>
-        <span>{partyOpen ? "▲" : "▼"}</span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              exportTable(
+                partyRows.map((r) => ({
+                  Party: r.party_name,
+                  "Total LRs": r.total_grs,
+                  "Collected LRs": r.collected_grs,
+                  Freight: r.total_freight,
+                  Collected: r.collected,
+                  Balance: r.balance,
+                  "Collection %": pct(r.collected, r.total_freight),
+                })),
+                `Party_Outstanding_${fromDate}_to_${toDate}`
+              );
+            }}
+            className="text-xs bg-emerald-50 text-emerald-700 px-3 py-1 rounded shadow-sm border border-emerald-200 hover:bg-emerald-100 transition"
+          >
+            Export Excel
+          </button>
+          <span>{partyOpen ? "▲" : "▼"}</span>
+        </div>
       </div>
 
       {partyOpen && (
