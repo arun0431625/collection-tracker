@@ -746,10 +746,26 @@ return (
         <span>Party-wise Outstanding</span>
         <div className="flex items-center gap-3">
           <button
-            onClick={(e) => {
+            onClick={async (e) => {
               e.stopPropagation();
+              // Fetch ALL party rows (bypass Supabase 1000-row default limit)
+              let allParty: any[] = [];
+              let from = 0;
+              const chunk = 1000;
+              while (true) {
+                const { data } = await supabase.rpc("get_party_outstanding", {
+                  p_branch_code: role === "ADMIN" ? null : branch,
+                  p_from_date: fromDate,
+                  p_to_date: toDate,
+                  p_search: null,
+                }).range(from, from + chunk - 1);
+                if (!data || data.length === 0) break;
+                allParty = allParty.concat(data);
+                if (data.length < chunk) break;
+                from += chunk;
+              }
               exportTable(
-                partyRows.map((r) => ({
+                allParty.map((r: any) => ({
                   Party: r.party_name,
                   Branches: r.branches || "-",
                   "Total LRs": r.total_grs,
