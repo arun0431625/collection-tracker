@@ -162,8 +162,9 @@ export default function Dashboard() {
             const existing = dbDataMap.get(isoDate);
             filledData.push({
               report_date: isoDate,
-              daily_collected: existing ? Number(existing.daily_collected) : 0,
-              daily_sales: existing ? Number(existing.daily_sales) : 0,
+              daily_collected: existing ? (Number(existing.daily_collected) || 0) : 0,
+              // Fallback to daily_freight if database isn't updated yet
+              daily_sales: existing ? (Number(existing.daily_sales) || Number(existing.daily_freight) || 0) : 0,
             });
           }
           setTrendData(filledData);
@@ -421,8 +422,8 @@ export default function Dashboard() {
                     boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
                   }}
                   labelFormatter={formatDateLabel}
-                  formatter={(val: number, name: string) => [
-                    formatINR(val),
+                  formatter={(val: any, name: string) => [
+                    formatINR(Number(val) || 0),
                     name === "daily_collected" ? "Total Collections" : "Total Sales",
                   ]}
                 />
@@ -430,7 +431,7 @@ export default function Dashboard() {
                 <Area
                   type="monotone"
                   dataKey="daily_collected"
-                  name="Daily Collections Received"
+                  name="Total Collections"
                   stroke="#10b981"
                   strokeWidth={3}
                   fillOpacity={1}
@@ -439,7 +440,7 @@ export default function Dashboard() {
                 <Area
                   type="monotone"
                   dataKey="daily_sales"
-                  name="Daily Total Sales"
+                  name="Total Sales"
                   stroke="#3b82f6"
                   strokeWidth={3}
                   fillOpacity={1}
