@@ -128,14 +128,30 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function logout() {
+    console.log("BranchContext: Starting logout sequence...");
     setLoading(true);
     hasBootstrapped.current = false;
 
     try {
+      // 1. Attempt server-side sign out
       await signOutCurrentUser();
-      setProfile(null);
+      console.log("BranchContext: Server-side sign out completed.");
+    } catch (err) {
+      console.error("BranchContext: Sign out error (ignored for local state):", err);
     } finally {
+      // 2. ALWAYS clear local state regardless of server response
+      setProfile(null);
+      
+      // 3. Clear all sessionStorage to reset filters and cached UI state
+      try {
+        sessionStorage.clear();
+        console.log("BranchContext: sessionStorage cleared.");
+      } catch (e) {
+        console.warn("BranchContext: Failed to clear sessionStorage:", e);
+      }
+      
       setLoading(false);
+      console.log("BranchContext: Logout sequence finished.");
     }
   }
 

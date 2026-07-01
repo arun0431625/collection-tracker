@@ -64,9 +64,15 @@ function excelDateToISO(val: any): string | null {
     return d.toISOString().slice(0, 10);
   }
   if (typeof val === "string") {
-    const p = val.split(/[-/]/);
-    if (p.length === 3 && p[2].length === 4) {
-      return `${p[2]}-${p[1].padStart(2, "0")}-${p[0].padStart(2, "0")}`;
+    const trimmed = val.trim();
+    const p = trimmed.split(/[-/]/);
+    if (p.length === 3) {
+      if (p[0].length === 4) {
+        return `${p[0]}-${p[1].padStart(2, "0")}-${p[2].padStart(2, "0")}`;
+      }
+      if (p[2].length === 4) {
+        return `${p[2]}-${p[1].padStart(2, "0")}-${p[0].padStart(2, "0")}`;
+      }
     }
   }
   return null;
@@ -82,15 +88,39 @@ function parseFreight(val: any): number | null {
   return null;
 }
 
+function normalizeHeader(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function getCell(row: any, aliases: string[]) {
+  const normalizedRow = new Map<string, any>();
+  Object.keys(row).forEach((key) => {
+    normalizedRow.set(normalizeHeader(key), row[key]);
+  });
+
+  for (const alias of aliases) {
+    const exactValue = row[alias];
+    if (exactValue !== undefined && exactValue !== null && exactValue !== "") return exactValue;
+
+    const normalizedValue = normalizedRow.get(normalizeHeader(alias));
+    if (normalizedValue !== undefined && normalizedValue !== null && normalizedValue !== "") {
+      return normalizedValue;
+    }
+  }
+
+  return "";
+}
+
 function parseUploadRow(r: any): UploadRow | null {
   const row: UploadRow = {
-    area_manager: String(r["Area Manager"] || "").trim(),
-    branch_code: String(r["Payment Collection Branch"] || "").trim().toUpperCase(),
-    gr_no: String(r["GR No"] || "").trim(),
-    gr_date: excelDateToISO(r["GR Date"]) || "",
-    party_name: String(r["Consignor Name (Paid) / Consignee Name (Topay)"] || "").trim(),
-    total_freight: parseFreight(r["Total Freight Rs"]) as number,
-    pay_mode: String(r["Pay Mode"] || "").trim(),
+    area_manager: String(getCell(r, ["Area Manager", "Area Manger", "AM"]) || "").trim(),
+    branch_code: String(getCell(r, ["Payment Collection Branch", "Collection Branch", "Branch", "Branch Code"]) || "").trim().toUpperCase(),
+    gr_no: String(getCell(r, ["GR No", "GR Number", "GRNO", "LR No", "LR Number"]) || "").trim(),
+    gr_date: excelDateToISO(getCell(r, ["GR Date", "LR Date", "Date"])) || "",
+    party_name: String(getCell(r, ["Consignor Name (Paid) / Consignee Name (Topay)", "Consignor Name", "Consignee Name", "Party Name"]) || "").trim(),
+    total_freight: parseFreight(getCell(r, ["Total Freight Rs", "Total Freight", "Freight", "Freight Rs", "Amount"])) as number,
+    pay_mode: String(getCell(r, ["Pay Mode", "Payment Type", "Mode"]) || "").trim(),
+    controlling_branch: String(getCell(r, ["Controlling Branch", "Main Branch", "Mapped To"]) || "").trim().toUpperCase(),
   };
 
   if (row.area_manager && row.branch_code && row.gr_no && row.gr_date &&
@@ -103,7 +133,7 @@ function parseUploadRow(r: any): UploadRow | null {
 function buildCollectionFieldUpdates(rawRows: any[]) {
   const updates: CollectionFieldUpdateRow[] = [];
   rawRows.forEach((row) => {
-    let paymentMode = String(row["Payment Mode"] || "").trim().toUpperCase();
+    let paymentMode = String(getCell(row, ["Payment Mode", "Collection Mode", "Mode"]) || "").trim().toUpperCase();
     
     if (paymentMode === "CASH") {
         paymentMode = "CASH";
@@ -111,20 +141,20 @@ function buildCollectionFieldUpdates(rawRows: any[]) {
         paymentMode = "BANK";
     }
 
-    const receivedAmount = parseFreight(row["Received"]);
-    const paymentDate = excelDateToISO(row["Payment Date"]);
-    const refNo = String(row["Ref No"] || "").trim();
+    const receivedAmount = parseFreight(getCell(row, ["Received", "Received Amount", "Collection Amount", "Paid Amount"]));
+    const paymentDate = excelDateToISO(getCell(row, ["Payment Date", "Collection Date", "Received Date"]));
+    const refNo = String(getCell(row, ["Ref No", "Reference No", "Reference Number", "UTR No", "UTR"]) || "").trim();
 
     if (!paymentMode || receivedAmount === null || !paymentDate || !refNo) return;
 
     updates.push({
-      branch_code: String(row["Payment Collection Branch"] || "").trim().toUpperCase(),
-      gr_no: String(row["GR No"] || "").trim().toUpperCase(),
+      branch_code: String(getCell(row, ["Payment Collection Branch", "Collection Branch", "Branch", "Branch Code"]) || "").trim().toUpperCase(),
+      gr_no: String(getCell(row, ["GR No", "GR Number", "GRNO", "LR No", "LR Number"]) || "").trim().toUpperCase(),
       payment_mode: paymentMode,
       received_amount: receivedAmount,
       payment_date: paymentDate,
       ref_no: refNo,
-      remarks: row["Remarks"] ? String(row["Remarks"]).trim() : null,
+      remarks: getCell(row, ["Remarks", "Remark"]) ? String(getCell(row, ["Remarks", "Remark"])).trim() : null,
     });
   });
   return updates;
@@ -294,7 +324,11 @@ export default function AdminUpload() {
         setStage("VALIDATED");
         // Manual persist after validation
         setTimeout(persistState, 0);
-        toast.success("File validation complete!");
+        if (validRows.length) {
+          toast.success("File validation complete!");
+        } else {
+          toast.error("No valid rows found. Please check the Excel column names and required values.");
+        }
       } catch (err) {
         toast.error("Failed to parse the Excel file.");
         console.error(err);
@@ -305,7 +339,10 @@ export default function AdminUpload() {
   }
 
   async function handleCheckDuplicates() {
-    if (!validRowsCache.length) return;
+    if (!validRowsCache.length) {
+      toast.error("No valid rows available. Validate a file with valid GR rows before checking duplicates.");
+      return;
+    }
 
     setLoading(true);
     setIsChecking(true);
@@ -479,7 +516,7 @@ export default function AdminUpload() {
 
   function downloadTemplate() {
     const sample = [{
-      "Area Manager": "RAJ", "Payment Collection Branch": "SURAT",
+      "Area Manager": "RAJ", "Payment Collection Branch": "SURAT", "Controlling Branch": "AHMEDABAD",
       "GR No": "S123456", "GR Date": "01-01-2026",
       "Consignor Name (Paid) / Consignee Name (Topay)": "ABC TEXTILES",
       "Total Freight Rs": 5000, "Pay Mode": "Paid",
@@ -567,8 +604,9 @@ export default function AdminUpload() {
             <div className="space-y-2">
               <button
                 onClick={handleCheckDuplicates}
-                disabled={loading}
+                disabled={loading || !validRowsCache.length}
                 className="rounded-lg bg-indigo-600 px-5 py-2 text-white shadow-sm hover:bg-indigo-700 transition-all duration-150 disabled:opacity-50"
+                title={!validRowsCache.length ? "No valid rows available for duplicate check" : undefined}
               >
                 {loading ? "Checking..." : "Check Duplicates"}
               </button>

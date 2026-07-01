@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useBranch } from "@/context/BranchContext";
+import { fetchAccessibleCollectionBranchCodes } from "@/services/collections.api";
 import {
   AreaChart,
   Area,
@@ -30,9 +31,23 @@ type BranchTrackerRow = {
 };
 
 type TrendRow = {
-  report_date: string;
+  period_start: string;
+  label: string;
+  tooltip_label: string;
   daily_collected: number;
   daily_sales: number;
+};
+
+type TimelineMode = "day" | "week" | "month";
+
+type TimelineRpcRow = {
+  period_start: string;
+  total_collected: number | string | null;
+  total_sales: number | string | null;
+  daily_collected?: number | string | null;
+  daily_sales?: number | string | null;
+  daily_freight?: number | string | null;
+  report_date?: string;
 };
 
 /* ---------------- Utils ---------------- */
@@ -56,6 +71,139 @@ const formatDateLabel = (dateStr: string) => {
   const d = new Date(dateStr);
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 };
+
+const TIMELINE_OPTIONS: Record<TimelineMode, number[]> = {
+  day: [7, 15, 30],
+  week: [4, 13, 26, 52],
+  month: [3, 6, 12],
+};
+
+const DEFAULT_TIMELINE_COUNT: Record<TimelineMode, number> = {
+  day: 15,
+  week: 13,
+  month: 6,
+};
+
+function toLocalISO(date: Date) {
+  return toISO(date.getFullYear(), date.getMonth() + 1, date.getDate());
+}
+
+function startOfDay(date: Date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function startOfWeek(date: Date) {
+  const d = startOfDay(date);
+  const day = d.getDay();
+  const diff = (day + 6) % 7;
+  d.setDate(d.getDate() - diff);
+  return d;
+}
+
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function getPeriodStart(date: Date, mode: TimelineMode) {
+  if (mode === "week") return startOfWeek(date);
+  if (mode === "month") return startOfMonth(date);
+  return startOfDay(date);
+}
+
+function shiftPeriod(date: Date, mode: TimelineMode, amount: number) {
+  const d = new Date(date);
+  if (mode === "week") {
+    d.setDate(d.getDate() + amount * 7);
+    return d;
+  }
+  if (mode === "month") {
+    d.setMonth(d.getMonth() + amount);
+    return d;
+  }
+  d.setDate(d.getDate() + amount);
+  return d;
+}
+
+function formatTimelineAxisLabel(date: Date, mode: TimelineMode) {
+  if (mode === "month") {
+    return date.toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
+  }
+  if (mode === "week") {
+    return `Wk ${date.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`;
+  }
+  return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+}
+
+function formatTimelineTooltipLabel(date: Date, mode: TimelineMode) {
+  if (mode === "month") {
+    return date.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  }
+  if (mode === "week") {
+    const end = shiftPeriod(date, "day", 6);
+    return `${formatDateLabel(toLocalISO(date))} - ${formatDateLabel(toLocalISO(end))}`;
+  }
+  return formatDateLabel(toLocalISO(date));
+}
+
+function buildTrendData(mode: TimelineMode, count: number, rows: TimelineRpcRow[]) {
+  const currentStart = getPeriodStart(new Date(), mode);
+  const firstStart = shiftPeriod(currentStart, mode, -(count - 1));
+  const map = new Map(
+    (rows || []).map((row) => {
+      const key = row.period_start || row.report_date || "";
+      return [key, row];
+    })
+  );
+
+  return Array.from({ length: count }).map((_, index) => {
+    const periodDate = shiftPeriod(firstStart, mode, index);
+    const key = toLocalISO(periodDate);
+    const row = map.get(key);
+    const collected =
+      Number(row?.total_collected ?? row?.daily_collected ?? 0) || 0;
+    const sales =
+      Number(row?.total_sales ?? row?.daily_sales ?? row?.daily_freight ?? 0) || 0;
+
+    return {
+      period_start: key,
+      label: formatTimelineAxisLabel(periodDate, mode),
+      tooltip_label: formatTimelineTooltipLabel(periodDate, mode),
+      daily_collected: collected,
+      daily_sales: sales,
+    };
+  });
+}
+
+function getFallbackTimelineDays(mode: TimelineMode, count: number) {
+  if (mode === "week") return count * 7;
+  if (mode === "month") return count * 31;
+  return count;
+}
+
+function aggregateDailyRowsToTimeline(mode: TimelineMode, rows: TimelineRpcRow[]) {
+  const buckets = new Map<string, { total_collected: number; total_sales: number }>();
+
+  (rows || []).forEach((row) => {
+    const rawDate = row.report_date || row.period_start;
+    if (!rawDate) return;
+
+    const bucketDate = getPeriodStart(new Date(rawDate), mode);
+    const bucketKey = toLocalISO(bucketDate);
+    const current = buckets.get(bucketKey) || { total_collected: 0, total_sales: 0 };
+
+    current.total_collected += Number(row.daily_collected ?? row.total_collected ?? 0) || 0;
+    current.total_sales += Number(row.daily_sales ?? row.daily_freight ?? row.total_sales ?? 0) || 0;
+    buckets.set(bucketKey, current);
+  });
+
+  return Array.from(buckets.entries()).map(([period_start, totals]) => ({
+    period_start,
+    total_collected: totals.total_collected,
+    total_sales: totals.total_sales,
+  }));
+}
 
 /* ---------------- Component ---------------- */
 export default function Dashboard() {
@@ -120,10 +268,23 @@ export default function Dashboard() {
   const balance = useMemo(() => kpi.total_freight - kpi.collected, [kpi]);
 
   /* ================== NEW DASHBOARD ANALYTICS ================== */
-  const [trendDays, setTrendDays] = useState<number>(15);
+  const [timelineMode, setTimelineMode] = useSessionStorageState<TimelineMode>(
+    "dash_timeline_mode",
+    "day"
+  );
+  const [timelineCount, setTimelineCount] = useSessionStorageState<number>(
+    "dash_timeline_count",
+    DEFAULT_TIMELINE_COUNT.day
+  );
+  const [selectedTrendBranch, setSelectedTrendBranch] = useSessionStorageState<string>(
+    "dash_timeline_branch",
+    ""
+  );
   const [trendData, setTrendData] = useState<TrendRow[]>([]);
   const [trackerData, setTrackerData] = useState<BranchTrackerRow[]>([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [trendBranchOptions, setTrendBranchOptions] = useState<string[]>([]);
+  const effectiveTrendBranch = role === "ADMIN" ? selectedTrendBranch || null : branch;
 
   // Sorting and Pagination for Tracker
   const [trackerPage, setTrackerPage] = useState(1);
@@ -134,40 +295,59 @@ export default function Dashboard() {
   const PAGE_SIZE = 15;
 
   useEffect(() => {
+    if (TIMELINE_OPTIONS[timelineMode].includes(timelineCount)) return;
+    setTimelineCount(DEFAULT_TIMELINE_COUNT[timelineMode]);
+  }, [timelineMode, timelineCount, setTimelineCount]);
+
+  useEffect(() => {
+    if (role !== "ADMIN") return;
+
+    async function fetchTrendBranches() {
+      try {
+        const branches = await fetchAccessibleCollectionBranchCodes();
+        setTrendBranchOptions(branches);
+      } catch (error) {
+        console.error("Failed to load dashboard branch options", error);
+      }
+    }
+
+    fetchTrendBranches();
+  }, [role]);
+
+  useEffect(() => {
     async function fetchAnalytics() {
       setAnalyticsLoading(true);
-      const branchParam = role === "ADMIN" ? null : branch;
       
       try {
         const [resTrend, resTracker] = await Promise.all([
-          supabase.rpc("get_dashboard_daily_trend", {
-            p_days: trendDays,
-            p_branch: branchParam,
+          supabase.rpc("get_dashboard_collection_timeline", {
+            p_mode: timelineMode,
+            p_points: timelineCount,
+            p_branch: effectiveTrendBranch,
           }),
           // Branch tracker is strictly for admins mapping all branches
           role === "ADMIN" ? supabase.rpc("get_branch_activity_monitor") : Promise.resolve({ data: [] }),
         ]);
 
         if (!resTrend.error && resTrend.data) {
-          const filledData: TrendRow[] = [];
-          const today = new Date();
-          const resTrendData = resTrend.data as any[];
-          const dbDataMap = new Map<string, any>(resTrendData.map((r: any) => [r.report_date, r]));
+          setTrendData(buildTrendData(timelineMode, timelineCount, resTrend.data as TimelineRpcRow[]));
+        } else {
+          const fallbackTrend = await supabase.rpc("get_dashboard_daily_trend", {
+            p_days: getFallbackTimelineDays(timelineMode, timelineCount),
+            p_branch: effectiveTrendBranch,
+          });
 
-          for (let i = trendDays - 1; i >= 0; i--) {
-            const d = new Date(today);
-            d.setDate(d.getDate() - i);
-            const isoDate = toISO(d.getFullYear(), d.getMonth() + 1, d.getDate());
+          if (!fallbackTrend.error && fallbackTrend.data) {
+            const fallbackRows = fallbackTrend.data as TimelineRpcRow[];
+            const aggregatedRows =
+              timelineMode === "day"
+                ? fallbackRows
+                : aggregateDailyRowsToTimeline(timelineMode, fallbackRows);
 
-            const existing = dbDataMap.get(isoDate);
-            filledData.push({
-              report_date: isoDate,
-              daily_collected: existing ? (Number(existing.daily_collected) || 0) : 0,
-              // Fallback to daily_freight if database isn't updated yet
-              daily_sales: existing ? (Number(existing.daily_sales) || Number(existing.daily_freight) || 0) : 0,
-            });
+            setTrendData(buildTrendData(timelineMode, timelineCount, aggregatedRows));
+          } else {
+            setTrendData([]);
           }
-          setTrendData(filledData);
         }
 
         if (resTracker.data) {
@@ -189,7 +369,7 @@ export default function Dashboard() {
     }
 
     fetchAnalytics();
-  }, [trendDays, branch, role]);
+  }, [timelineMode, timelineCount, effectiveTrendBranch, role]);
 
 
   const sortedTrackerData = useMemo(() => {
@@ -355,25 +535,56 @@ export default function Dashboard() {
               Collection Timeline
             </h2>
             <p className="text-sm text-gray-500">
-              Daily collections tracking over time
+              Collections and sales tracking over the selected timeline
             </p>
           </div>
 
-          {/* Graph Interactive Filter */}
-          <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
-            {[7, 15, 30].map((days) => (
-              <button
-                key={days}
-                onClick={() => setTrendDays(days)}
-                className={`px-3 py-1 text-sm rounded-md font-medium transition ${
-                  trendDays === days
-                    ? "bg-white shadow text-blue-600"
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 text-xs text-gray-500">
+              View
+              <select
+                value={timelineMode}
+                onChange={(e) => setTimelineMode(e.target.value as TimelineMode)}
+                className="border rounded px-3 py-2 text-sm bg-white text-gray-700 outline-none"
               >
-                {days} days
-              </button>
-            ))}
+                <option value="day">Days</option>
+                <option value="week">Weeks</option>
+                <option value="month">Months</option>
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1 text-xs text-gray-500">
+              Range
+              <select
+                value={timelineCount}
+                onChange={(e) => setTimelineCount(Number(e.target.value))}
+                className="border rounded px-3 py-2 text-sm bg-white text-gray-700 outline-none"
+              >
+                {TIMELINE_OPTIONS[timelineMode].map((count) => (
+                  <option key={count} value={count}>
+                    {count} {timelineMode === "day" ? "days" : timelineMode === "week" ? "weeks" : "months"}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {role === "ADMIN" && (
+              <label className="flex flex-col gap-1 text-xs text-gray-500">
+                Branch
+                <select
+                  value={selectedTrendBranch}
+                  onChange={(e) => setSelectedTrendBranch(e.target.value)}
+                  className="border rounded px-3 py-2 text-sm bg-white text-gray-700 outline-none min-w-40"
+                >
+                  <option value="">All Branches</option>
+                  {trendBranchOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
         </div>
 
@@ -383,7 +594,7 @@ export default function Dashboard() {
           </div>
         ) : trendData.length === 0 ? (
           <div className="h-72 flex items-center justify-center text-gray-400">
-            No collection data recorded in the last {trendDays} days.
+            No collection data recorded for the selected timeline.
           </div>
         ) : (
           <div className="h-72 w-full">
@@ -401,8 +612,7 @@ export default function Dashboard() {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                 <XAxis
-                  dataKey="report_date"
-                  tickFormatter={formatDateLabel}
+                  dataKey="label"
                   axisLine={false}
                   tickLine={false}
                   tick={{ fontSize: 12, fill: "#6B7280" }}
@@ -421,7 +631,11 @@ export default function Dashboard() {
                     border: "none",
                     boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
                   }}
-                  labelFormatter={formatDateLabel}
+                  labelFormatter={(_, payload) =>
+                    payload && payload[0]?.payload?.tooltip_label
+                      ? payload[0].payload.tooltip_label
+                      : ""
+                  }
                   formatter={(val: any, name: string) => [
                     formatINR(Number(val) || 0),
                     name,

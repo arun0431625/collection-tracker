@@ -8,6 +8,7 @@ export type UploadRow = {
   party_name: string;
   total_freight: number;
   pay_mode: string;
+  controlling_branch?: string;
 };
 
 export type CollectionFieldUpdateRow = {
@@ -27,6 +28,7 @@ export type SecurityRow = {
   is_active: boolean;
   password_changed_at: string | null;
   username?: string;
+  mapped_to: string | null;
 };
 
 export type BranchDeleteSummary = {
@@ -155,6 +157,40 @@ export async function updateBranchUsername(branchCode: string, newUsername: stri
     p_branch_code: branchCode,
     p_new_username: newUsername,
   });
+
+  if (error) {
+    throw new Error(getErrorMessage(error));
+  }
+}
+
+export async function mapBranchToMain(branchCode: string, mappedTo: string) {
+  const { error } = await supabase.rpc("admin_map_branch", {
+    p_branch_code: branchCode,
+    p_mapped_to: mappedTo,
+  });
+
+  if (error) {
+    throw new Error(getErrorMessage(error));
+  }
+}
+export async function getAppSetting(key: string): Promise<any> {
+  const { data, error } = await supabase
+    .from("app_settings")
+    .select("value")
+    .eq("key", key)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Failed to get setting:", error);
+    return null;
+  }
+  return data?.value ?? null;
+}
+
+export async function setAppSetting(key: string, value: any) {
+  const { error } = await supabase
+    .from("app_settings")
+    .upsert({ key, value });
 
   if (error) {
     throw new Error(getErrorMessage(error));

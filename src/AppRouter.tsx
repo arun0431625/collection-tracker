@@ -7,6 +7,7 @@ import Reports from "./pages/Reports";
 import AdminUpload from "./pages/AdminUpload";
 import ChangePassword from "./pages/ChangePassword";
 import Security from "./pages/Security";
+import BranchTransfers from "./pages/BranchTransfers";
 
 import AppLayout from "./components/layout/AppLayout";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -26,6 +27,7 @@ export default function AppRouter() {
 
           <Route element={<ProtectedRoute requireRole="ADMIN" />}>
             <Route path="/admin-upload" element={<AdminUpload />} />
+            <Route path="/branch-transfers" element={<BranchTransfers />} />
             <Route path="/security" element={<Security />} />
           </Route>
         </Route>

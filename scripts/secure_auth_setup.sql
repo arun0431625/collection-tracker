@@ -202,7 +202,8 @@
       received_amount = p_received_amount,
       payment_date = p_payment_date,
       ref_no = p_ref_no,
-      remarks = p_remarks
+      remarks = p_remarks,
+      last_updated = now()
     where gr_no = p_gr_no
       and upper(branch_code) = upper(trim(p_branch_code));
   end;
@@ -225,14 +226,16 @@
 
     -- Auto-create branches for any new branch_code in the upload
     for branch_rec in
-      select distinct upper(trim(x.branch_code)) as bc, x.area_manager as am
-      from jsonb_to_recordset(p_rows) as x(branch_code text, area_manager text)
+      select distinct upper(trim(x.branch_code)) as bc, x.area_manager as am, upper(trim(x.controlling_branch)) as cb
+      from jsonb_to_recordset(p_rows) as x(branch_code text, area_manager text, controlling_branch text)
       where upper(trim(x.branch_code)) <> ''
     loop
       -- Create branch row if not exists
-      insert into public.branches (id, branch_code, branch_name, area_manager, role, is_active, must_change_password, password_hash)
-      values (gen_random_uuid(), branch_rec.bc, branch_rec.bc, branch_rec.am, 'BRANCH', true, true, 'legacy_auth_removed')
-      on conflict (branch_code) do update set area_manager = excluded.area_manager;
+      insert into public.branches (id, branch_code, branch_name, area_manager, role, is_active, must_change_password, password_hash, mapped_to)
+      values (gen_random_uuid(), branch_rec.bc, branch_rec.bc, branch_rec.am, 'BRANCH', true, true, 'legacy_auth_removed', coalesce(nullif(branch_rec.cb, ''), branch_rec.bc))
+      on conflict (branch_code) do update set 
+        area_manager = excluded.area_manager,
+        mapped_to = coalesce(excluded.mapped_to, branches.mapped_to);
 
       -- Create auth user if not exists
       target_email := public.branch_email(branch_rec.bc);
@@ -276,13 +279,15 @@
 
     -- Auto-create branches for any new branch_code in the upload
     for branch_rec in
-      select distinct upper(trim(x.branch_code)) as bc, x.area_manager as am
-      from jsonb_to_recordset(p_rows) as x(branch_code text, area_manager text)
+      select distinct upper(trim(x.branch_code)) as bc, x.area_manager as am, upper(trim(x.controlling_branch)) as cb
+      from jsonb_to_recordset(p_rows) as x(branch_code text, area_manager text, controlling_branch text)
       where upper(trim(x.branch_code)) <> ''
     loop
-      insert into public.branches (id, branch_code, branch_name, area_manager, role, is_active, must_change_password, password_hash)
-      values (gen_random_uuid(), branch_rec.bc, branch_rec.bc, branch_rec.am, 'BRANCH', true, true, 'legacy_auth_removed')
-      on conflict (branch_code) do update set area_manager = excluded.area_manager;
+      insert into public.branches (id, branch_code, branch_name, area_manager, role, is_active, must_change_password, password_hash, mapped_to)
+      values (gen_random_uuid(), branch_rec.bc, branch_rec.bc, branch_rec.am, 'BRANCH', true, true, 'legacy_auth_removed', coalesce(nullif(branch_rec.cb, ''), branch_rec.bc))
+      on conflict (branch_code) do update set 
+        area_manager = excluded.area_manager,
+        mapped_to = coalesce(excluded.mapped_to, branches.mapped_to);
 
       target_email := public.branch_email(branch_rec.bc);
       if not exists (select 1 from auth.users where lower(email) = target_email) then
@@ -352,7 +357,8 @@
     branch_code text,
     area_manager text,
     is_active boolean,
-    password_changed_at timestamptz
+    password_changed_at timestamptz,
+    mapped_to text
   )
   language plpgsql
   security definer
@@ -369,7 +375,8 @@
       b.branch_code::text,
       b.area_manager::text,
       coalesce(b.is_active, false)::boolean as is_active,
-      b.password_changed_at::timestamptz
+      b.password_changed_at::timestamptz,
+      b.mapped_to::text
     from public.branches b
     order by b.branch_code;
   end;

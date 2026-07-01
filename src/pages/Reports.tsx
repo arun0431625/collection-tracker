@@ -9,6 +9,8 @@ import { supabase } from "@/lib/supabase";
 import { useBranch } from "@/context/BranchContext";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
+import { useSessionStorageState } from "@/hooks/useSessionStorageState";
+import { toast } from "sonner";
 
 // ================= TYPES =================
 type AreaManagerSummaryRow = {
@@ -44,22 +46,185 @@ collected_grs: number;
 total_freight: number;
 collected: number;
 balance: number;
+total_count?: number;
 };
 
 type AreaRow = AreaManagerSummaryRow;
+type SortState = { key: string; dir: "asc" | "desc" };
+type PartyFetchProgress = {
+  fetchedCount: number;
+  totalCount: number | null;
+};
+
+const CURRENCY_LABEL = "Rs.";
+const UP_ARROW = "^";
+const DOWN_ARROW = "v";
+const DATE_RANGE_ARROW = "->";
+
+const DEFAULT_PARTY_SORT: SortState = {
+  key: "total_freight",
+  dir: "desc",
+};
+
+function normalizePartyRows(rows: any[]): PartyRow[] {
+  return (rows || []).map((row: any) => ({
+    party_name: row.party_name || "UNKNOWN",
+    branches: row.branches || "",
+    total_grs: Number(row.total_grs) || 0,
+    collected_grs: Number(row.collected_grs) || 0,
+    total_freight: Number(row.total_freight) || 0,
+    collected: Number(row.collected) || 0,
+    balance: Number(row.balance) || 0,
+    total_count: Number(row.total_count) || 0,
+  }));
+}
+
+async function fetchAllPartyOutstandingRows({
+  branchCode,
+  fromDate,
+  toDate,
+  search,
+  sort,
+  onProgress,
+}: {
+  branchCode: string | null;
+  fromDate: string;
+  toDate: string;
+  search: string;
+  sort: SortState;
+  onProgress?: (progress: PartyFetchProgress) => void;
+}) {
+  const allRows: PartyRow[] = [];
+  let from = 0;
+  const chunkSize = 1000;
+  let usedFallback = false;
+
+  while (true) {
+    const { data, error } = await supabase.rpc("get_party_outstanding_page", {
+      p_branch_code: branchCode,
+      p_from_date: fromDate,
+      p_to_date: toDate,
+      p_search: search.trim() || null,
+      p_sort_key: sort.key,
+      p_sort_dir: sort.dir,
+      p_limit: chunkSize,
+      p_offset: from,
+    });
+
+    if (error) {
+      usedFallback = true;
+      const { data: fallbackData, error: fallbackError } = await supabase.rpc(
+        "get_party_outstanding",
+        {
+          p_branch_code: branchCode,
+          p_from_date: fromDate,
+          p_to_date: toDate,
+          p_search: search.trim() || null,
+        }
+      ).range(from, from + chunkSize - 1);
+
+      if (fallbackError) {
+        throw fallbackError;
+      }
+
+      allRows.push(...normalizePartyRows(fallbackData || []));
+      onProgress?.({
+        fetchedCount: allRows.length,
+        totalCount: null,
+      });
+
+      if (!fallbackData || fallbackData.length < chunkSize) {
+        break;
+      }
+
+      from += chunkSize;
+      continue;
+    }
+
+    if (!data || data.length === 0) {
+      break;
+    }
+
+    allRows.push(...normalizePartyRows(data));
+    const totalCount = Number(data[0]?.total_count) || 0;
+    onProgress?.({
+      fetchedCount: allRows.length,
+      totalCount: totalCount || null,
+    });
+
+    if (data.length < chunkSize) {
+      break;
+    }
+
+    from += chunkSize;
+  }
+
+  return usedFallback ? sortData(allRows, sort) : allRows;
+}
+
+async function fetchPartyOutstandingPage({
+  branchCode,
+  fromDate,
+  toDate,
+  search,
+  sort,
+  page,
+  pageSize,
+}: {
+  branchCode: string | null;
+  fromDate: string;
+  toDate: string;
+  search: string;
+  sort: SortState;
+  page: number;
+  pageSize: number;
+}) {
+  const offset = (page - 1) * pageSize;
+
+  const { data, error } = await supabase.rpc("get_party_outstanding_page", {
+    p_branch_code: branchCode,
+    p_from_date: fromDate,
+    p_to_date: toDate,
+    p_search: search.trim() || null,
+    p_sort_key: sort.key,
+    p_sort_dir: sort.dir,
+    p_limit: pageSize,
+    p_offset: offset,
+  });
+
+  if (!error) {
+    return {
+      rows: normalizePartyRows(data || []),
+      totalCount: Number(data?.[0]?.total_count) || 0,
+    };
+  }
+
+  const allRows = await fetchAllPartyOutstandingRows({
+    branchCode,
+    fromDate,
+    toDate,
+    search,
+    sort,
+  });
+
+  return {
+    rows: allRows.slice(offset, offset + pageSize),
+    totalCount: allRows.length,
+  };
+}
 
 export default function Reports() {
 const { branch, role } = useBranch();
 
 const [areaRows, setAreaRows] = useState<AreaRow[]>([]);
 
-const [fromDate, setFromDate] = useState<string>(() => {
+const [fromDate, setFromDate] = useSessionStorageState<string>("reports_from_date", () => {
   const d = new Date();
   d.setDate(1);
   return d.toISOString().slice(0, 10);
 });
 
-const [toDate, setToDate] = useState<string>(() => {
+const [toDate, setToDate] = useSessionStorageState<string>("reports_to_date", () => {
   const d = new Date();
   return d.toISOString().slice(0, 10);
 });
@@ -68,9 +233,9 @@ const [summaryRows, setSummaryRows] = useState<MonthlyRow[]>([]);
 const [ageingRows, setAgeingRows] = useState<AgeingRow[]>([]);
 const [loading, setLoading] = useState(true);
 
-const [branchOpen, setBranchOpen] = useState(true);
-const [areaOpen, setAreaOpen] = useState(false);
-const [partyOpen, setPartyOpen] = useState(false);
+const [branchOpen, setBranchOpen] = useSessionStorageState<boolean>("reports_branch_open", true);
+const [areaOpen, setAreaOpen] = useSessionStorageState<boolean>("reports_area_open", false);
+const [partyOpen, setPartyOpen] = useSessionStorageState<boolean>("reports_party_open", false);
 
 const BRANCH_PAGE_SIZE = 25;
 const PARTY_PAGE_SIZE = 25;
@@ -79,15 +244,17 @@ const [branchPage, setBranchPage] = useState(1);
 const [partyPage, setPartyPage] = useState(1);
 
 // 🔹 Sorting state
-const [branchSort, setBranchSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
-const [areaSort, setAreaSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
-const [partySort, setPartySort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
+const [branchSort, setBranchSort] = useState<SortState | null>(null);
+const [areaSort, setAreaSort] = useState<SortState | null>(null);
+const [partySort, setPartySort] = useState<SortState>(DEFAULT_PARTY_SORT);
 
 const [partyRows, setPartyRows] = useState<PartyRow[]>([]);
 const [partyLoading, setPartyLoading] = useState(false);
+const [partyTotalCount, setPartyTotalCount] = useState(0);
+const [partyExporting, setPartyExporting] = useState(false);
 
 const PAGE_SIZE = 25;
-const [partySearch, setPartySearch] = useState("");
+const [partySearch, setPartySearch] = useSessionStorageState<string>("reports_party_search", "");
 const [debouncedPartySearch, setDebouncedPartySearch] = useState("");
 
 function exportTable(data: any[], filename: string) {
@@ -264,26 +431,33 @@ useEffect(() => {
   async function fetchPartyOutstanding() {
     setPartyLoading(true);
 
-    const { data } = await supabase.rpc("get_party_outstanding", {
-      p_branch_code: role === "ADMIN" ? null : branch,
-      p_from_date: fromDate,
-      p_to_date: toDate,
-      p_search: debouncedPartySearch.trim() || null,
-    });
+    try {
+      const result = await fetchPartyOutstandingPage({
+        branchCode: role === "ADMIN" ? null : branch,
+        fromDate,
+        toDate,
+        search: debouncedPartySearch,
+        sort: partySort,
+        page: partyPage,
+        pageSize: PARTY_PAGE_SIZE,
+      });
 
-    setPartyRows(data || []);
-    setPartyLoading(false);
+      setPartyRows(result.rows);
+      setPartyTotalCount(result.totalCount);
+    } finally {
+      setPartyLoading(false);
+    }
   }
 
   fetchPartyOutstanding();
-  }, [partyOpen, branch, debouncedPartySearch, fromDate, toDate, role]);
+  }, [partyOpen, branch, debouncedPartySearch, fromDate, toDate, role, partySort, partyPage]);
   useEffect(() => {
     setBranchPage(1);
   }, [fromDate, toDate, branch]);
 
   useEffect(() => {
     setPartyPage(1);
-  }, [debouncedPartySearch, fromDate, toDate, branch]);
+  }, [debouncedPartySearch, fromDate, toDate, branch, partySort]);
 
 function sortData<T extends Record<string, any>>(
   data: T[],
@@ -348,8 +522,8 @@ const sortedAreaRows = useMemo(
 );
 
 const sortedPartyRows = useMemo(
-  () => sortData(partyRows, partySort),
-  [partyRows, partySort]
+  () => partyRows,
+  [partyRows]
 );
 
 // ===== PAGED ROWS (AFTER SORT) =====
@@ -359,9 +533,8 @@ const pagedBranchRows = useMemo(() => {
 }, [sortedBranchRows, branchPage]);
 
 const pagedPartyRows = useMemo(() => {
-  const start = (partyPage - 1) * PAGE_SIZE;
-  return sortedPartyRows.slice(start, start + PAGE_SIZE);
-}, [sortedPartyRows, partyPage]);
+  return sortedPartyRows;
+}, [sortedPartyRows]);
 
 // ================= KPI =================
 const summary = useMemo(() => {
@@ -386,7 +559,7 @@ const summary = useMemo(() => {
   };
 }, [summaryRows]);
 
-if (loading) return <div className="p-6">Loading reports…</div>;
+if (loading) return <div className="p-6">Loading reports...</div>;
 
 return (
   <div className="p-4 space-y-6">
@@ -412,9 +585,9 @@ return (
     {/* KPI */}
     <div className="grid grid-cols-4 gap-3">
       <Kpi label="Total LRs" value={summary.totalGRs} />
-      <Kpi label="Total Freight" value={`₹ ${fmt(summary.totalFreight)}`} />
-      <Kpi label="Collected" value={`₹ ${fmt(summary.collected)}`} green />
-      <Kpi label="Balance" value={`₹ ${fmt(summary.balance)}`} red />
+      <Kpi label="Total Freight" value={`${CURRENCY_LABEL} ${fmt(summary.totalFreight)}`} />
+      <Kpi label="Collected" value={`${CURRENCY_LABEL} ${fmt(summary.collected)}`} green />
+      <Kpi label="Balance" value={`${CURRENCY_LABEL} ${fmt(summary.balance)}`} red />
     </div>
 
     {/* Ageing */}
@@ -432,7 +605,7 @@ return (
             ([bucket, amt]) => (
               <tr key={bucket}>
                 <td className="border px-2 py-1">{bucket} days</td>
-                <td className="border px-2 py-1 text-right">₹ {fmt(amt as number)}</td>
+                <td className="border px-2 py-1 text-right">{CURRENCY_LABEL} {fmt(amt as number)}</td>
               </tr>
             )
           )}
@@ -572,7 +745,7 @@ return (
                 </td>
 
                 <td className="border px-2 py-1 text-right">
-                  ₹ {fmt(b.total_freight)}
+                  {CURRENCY_LABEL} {fmt(b.total_freight)}
                 </td>
 
                 <td className="border px-2 py-1 text-center">
@@ -580,7 +753,7 @@ return (
                 </td>
 
                 <td className="border px-2 py-1 text-right text-red-700">
-                  ₹ {fmt(b.total_freight - b.collected)}
+                  {CURRENCY_LABEL} {fmt(b.total_freight - b.collected)}
                 </td>
               </tr>
             ))}
@@ -720,7 +893,7 @@ return (
                 </td>
 
                 <td className="border px-2 py-1 text-right">
-                  ₹ {fmt(a.totalFreight)}
+                  {CURRENCY_LABEL} {fmt(a.totalFreight)}
                 </td>
 
                 <td className="border px-2 py-1 text-center">
@@ -728,7 +901,7 @@ return (
                 </td>
 
                 <td className="border px-2 py-1 text-right text-red-700">
-                  ₹ {fmt(a.balance)}
+                  {CURRENCY_LABEL} {fmt(a.balance)}
                 </td>
               </tr>
             ))}
@@ -748,39 +921,54 @@ return (
           <button
             onClick={async (e) => {
               e.stopPropagation();
-              // Fetch ALL party rows (bypass Supabase 1000-row default limit)
-              let allParty: any[] = [];
-              let from = 0;
-              const chunk = 1000;
-              while (true) {
-                const { data } = await supabase.rpc("get_party_outstanding", {
-                  p_branch_code: role === "ADMIN" ? null : branch,
-                  p_from_date: fromDate,
-                  p_to_date: toDate,
-                  p_search: null,
-                }).range(from, from + chunk - 1);
-                if (!data || data.length === 0) break;
-                allParty = allParty.concat(data);
-                if (data.length < chunk) break;
-                from += chunk;
+              const toastId = toast.loading("Preparing party export...");
+              setPartyExporting(true);
+
+              try {
+                const allParty = await fetchAllPartyOutstandingRows({
+                  branchCode: role === "ADMIN" ? null : branch,
+                  fromDate,
+                  toDate,
+                  search: debouncedPartySearch,
+                  sort: partySort,
+                  onProgress: ({ fetchedCount, totalCount }) => {
+                    toast.loading(
+                      totalCount
+                        ? `Fetched ${fetchedCount} of ${totalCount} parties...`
+                        : `Fetched ${fetchedCount} parties...`,
+                      { id: toastId }
+                    );
+                  },
+                });
+
+                exportTable(
+                  allParty.map((r: PartyRow) => ({
+                    Party: r.party_name,
+                    Branches: r.branches || "-",
+                    "Total LRs": r.total_grs,
+                    "Collected LRs": r.collected_grs,
+                    Freight: r.total_freight,
+                    Collected: r.collected,
+                    Balance: r.balance,
+                    "Collection %": pct(r.collected, r.total_freight),
+                  })),
+                  `Party_Outstanding_${fromDate}_to_${toDate}`
+                );
+
+                toast.success(`Party export ready. ${allParty.length} rows exported.`, {
+                  id: toastId,
+                });
+              } catch (error) {
+                console.error(error);
+                toast.error("Party export failed.", { id: toastId });
+              } finally {
+                setPartyExporting(false);
               }
-              exportTable(
-                allParty.map((r: any) => ({
-                  Party: r.party_name,
-                  Branches: r.branches || "-",
-                  "Total LRs": r.total_grs,
-                  "Collected LRs": r.collected_grs,
-                  Freight: r.total_freight,
-                  Collected: r.collected,
-                  Balance: r.balance,
-                  "Collection %": pct(r.collected, r.total_freight),
-                })),
-                `Party_Outstanding_${fromDate}_to_${toDate}`
-              );
             }}
-            className="text-xs bg-emerald-500 text-white px-3 py-1 rounded shadow border border-emerald-600 hover:bg-emerald-600 transition"
+            disabled={partyExporting || partyLoading}
+            className="text-xs bg-emerald-500 text-white px-3 py-1 rounded shadow border border-emerald-600 hover:bg-emerald-600 transition disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Export Excel
+            {partyExporting ? "Exporting..." : "Export Excel"}
           </button>
           <span>{partyOpen ? "▲" : "▼"}</span>
         </div>
@@ -796,11 +984,7 @@ return (
             onChange={(e) => setPartySearch(e.target.value)}
           />
 
-          {partyLoading && (
-            <div className="text-sm text-gray-500">Loading party outstanding…</div>
-          )}
-
-          <table className="w-full table-fixed border-collapse text-sm">
+          <table className={`w-full table-fixed border-collapse text-sm transition-opacity ${partyLoading ? "opacity-85" : "opacity-100"}`}>
           <thead className="bg-gray-50">
             <tr className="text-left">
               <SortTH width="25%" label="Party" sortKey="party_name"
@@ -905,16 +1089,16 @@ return (
                 <td className="border px-2 py-1 text-right">{r.total_grs}</td>
                 <td className="border px-2 py-1 text-right">{r.collected_grs}</td>
                 <td className="border px-2 py-1 text-right">{pct(r.collected_grs, r.total_grs)}</td>
-                <td className="border px-2 py-1 text-right">₹ {fmt(r.total_freight)}</td>
+                <td className="border px-2 py-1 text-right">{CURRENCY_LABEL} {fmt(r.total_freight)}</td>
                 <td className="border px-2 py-1 text-right">{pct(r.collected, r.total_freight)}</td>
-                <td className="border px-2 py-1 text-right text-red-700">₹ {fmt(r.balance)}</td>
+                <td className="border px-2 py-1 text-right text-red-700">{CURRENCY_LABEL} {fmt(r.balance)}</td>
               </tr>
             ))}
           </tbody>
           </table>
             <div className="flex justify-end gap-2 pt-2">
               <button
-                disabled={partyPage === 1}
+                disabled={partyPage === 1 || partyLoading}
                 onClick={() => setPartyPage((p) => p - 1)}
                 className="px-2 py-1 border rounded disabled:opacity-50"
               >
@@ -922,11 +1106,11 @@ return (
               </button>
 
               <span className="text-sm px-2">
-                Page {partyPage} / {Math.ceil(partyRows.length / PAGE_SIZE)}
+                Page {partyPage} / {Math.max(1, Math.ceil(partyTotalCount / PARTY_PAGE_SIZE))}
               </span>
 
               <button
-                disabled={partyPage >= Math.ceil(partyRows.length / PAGE_SIZE)}
+                disabled={partyLoading || partyPage >= Math.max(1, Math.ceil(partyTotalCount / PARTY_PAGE_SIZE))}
                 onClick={() => setPartyPage((p) => p + 1)}
                 className="px-2 py-1 border rounded disabled:opacity-50"
               >

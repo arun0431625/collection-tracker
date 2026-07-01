@@ -9,6 +9,9 @@ import {
   resetBranchPassword,
   setBranchActive,
   updateBranchUsername,
+  mapBranchToMain,
+  getAppSetting,
+  setAppSetting,
 } from "@/services/admin";
 
 type UserRow = Awaited<ReturnType<typeof fetchSecurityRows>>[number];
@@ -34,6 +37,16 @@ export default function Security() {
   const [editUsernameVal, setEditUsernameVal] = useState("");
   const [savingUsername, setSavingUsername] = useState(false);
 
+  // Mapping Editing State
+  const [editingMapping, setEditingMapping] = useState<string | null>(null);
+  const [editMappingVal, setEditMappingVal] = useState("");
+  const [savingMapping, setSavingMapping] = useState(false);
+
+  const [showMappingModal, setShowMappingModal] = useState(false);
+  const [modalSearch, setModalSearch] = useState("");
+
+  const [transferEnabled, setTransferEnabled] = useState(true);
+
   const totalBranches = rows.length;
   const activeCount = rows.filter((r) => r.is_active).length;
   const disabledCount = rows.filter((r) => !r.is_active).length;
@@ -52,6 +65,11 @@ export default function Security() {
       setBranchOptions(
         Array.from(new Set(data.map((row) => row.branch_code))).sort()
       );
+
+      const isTransferEnabled = await getAppSetting("transfer_enabled");
+      if (isTransferEnabled !== null) {
+        setTransferEnabled(isTransferEnabled);
+      }
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to load branches");
     } finally {
@@ -169,6 +187,37 @@ export default function Security() {
     }
   }
 
+  async function handleSaveMapping(branchCode: string) {
+    const val = editMappingVal.trim().toUpperCase();
+    if (branchCode === val) {
+      alert("A branch cannot be mapped to itself");
+      return;
+    }
+    setSavingMapping(true);
+    try {
+      await mapBranchToMain(branchCode, val);
+      setRows((prev) =>
+        prev.map((r) => (r.branch_code === branchCode ? { ...r, mapped_to: val || null } : r))
+      );
+      setEditingMapping(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to update mapping");
+    } finally {
+      setSavingMapping(false);
+    }
+  }
+
+  async function handleToggleTransfer() {
+    const newVal = !transferEnabled;
+    try {
+      setTransferEnabled(newVal);
+      await setAppSetting("transfer_enabled", newVal);
+    } catch (err) {
+      alert("Failed to update transfer setting");
+      setTransferEnabled(!newVal);
+    }
+  }
+
   function getPasswordStatus(row: UserRow) {
     return row.password_changed_at ? "Custom password set" : "Temporary password active";
   }
@@ -178,6 +227,7 @@ export default function Security() {
       Branch: row.branch_code,
       Area_Manager: row.area_manager || "",
       Username: row.username || row.branch_code,
+      Mapped_To: row.mapped_to || "-",
       Status: row.is_active ? "Active" : "Disabled",
       Password_Status: getPasswordStatus(row),
     }));
@@ -204,6 +254,19 @@ export default function Security() {
     );
   });
 
+  const controllingBranches = filteredRows.filter(
+    (row) => !row.mapped_to || row.mapped_to === row.branch_code
+  );
+
+  const modalBranches = rows.filter((row) => {
+    const query = modalSearch.toLowerCase().trim();
+    if (!query) return true;
+    return (
+      (row.branch_code || "").toLowerCase().includes(query) ||
+      (row.area_manager || "").toLowerCase().includes(query)
+    );
+  });
+
   if (role !== "ADMIN") {
     return <div className="p-6 text-red-600">Access denied</div>;
   }
@@ -224,8 +287,16 @@ export default function Security() {
           </p>
         </div>
 
-        <div className="text-xs text-gray-400">
-          Logged in as: <b>HO (Admin)</b>
+        <div className="flex flex-col items-end gap-2">
+          <div className="text-xs text-gray-400">
+            Logged in as: <b>HO (Admin)</b>
+          </div>
+          <button
+            onClick={() => setShowMappingModal(true)}
+            className="rounded bg-purple-600 px-3 py-1.5 text-xs text-white hover:bg-purple-700 shadow-sm transition"
+          >
+            Branch Mapping
+          </button>
         </div>
       </div>
 
@@ -296,7 +367,26 @@ export default function Security() {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
+        <div className="rounded border bg-white p-4">
+          <div className="text-xs text-gray-500">Global Settings</div>
+          <div className="mt-1 flex items-center justify-between">
+            <span className="text-sm font-medium">Transfer Functionality</span>
+            <button
+              onClick={() => void handleToggleTransfer()}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                transferEnabled ? "bg-emerald-500" : "bg-gray-300"
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  transferEnabled ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
         <div className="rounded border bg-white p-4">
           <div className="text-xs text-gray-500">Total Branches</div>
           <div className="text-xl font-semibold">{totalBranches}</div>
@@ -363,7 +453,7 @@ export default function Security() {
           </thead>
 
           <tbody>
-            {filteredRows.map((row) => (
+            {controllingBranches.map((row) => (
               <tr
                 key={row.id}
                 className="border-t border-slate-100 hover:bg-slate-50 transition-all duration-200"
@@ -465,12 +555,110 @@ export default function Security() {
           </tbody>
         </table>
 
-        {filteredRows.length === 0 && (
+        {controllingBranches.length === 0 && (
           <div className="p-4 text-center text-sm text-gray-500">
-            No branches found
+            No controlling branches found
           </div>
         )}
       </div>
+
+      {/* Mapping Modal */}
+      {showMappingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-full">
+            <div className="px-6 py-4 border-b flex items-center justify-between bg-slate-50">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-800">Branch Mapping Configuration</h2>
+                <p className="text-sm text-slate-500">Map sub-branches to their controlling main branch</p>
+              </div>
+              <button
+                onClick={() => setShowMappingModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-xl font-bold p-2"
+              >
+                &times;
+              </button>
+            </div>
+            
+            <div className="p-4 border-b bg-white">
+              <input
+                type="text"
+                placeholder="Search branches..."
+                className="w-full rounded border px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                value={modalSearch}
+                onChange={(e) => setModalSearch(e.target.value)}
+              />
+            </div>
+
+            <div className="flex-1 overflow-auto bg-white p-6">
+              <table className="min-w-full text-sm border-collapse">
+                <thead className="bg-slate-50 sticky top-0">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium text-slate-600 uppercase text-xs">Actual Branch</th>
+                    <th className="px-4 py-3 text-left font-medium text-slate-600 uppercase text-xs">Area Manager</th>
+                    <th className="px-4 py-3 text-left font-medium text-purple-700 uppercase text-xs">Controlling Branch</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {modalBranches.map((row) => (
+                    <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
+                      <td className="px-4 py-3 font-medium text-slate-800">{row.branch_code}</td>
+                      <td className="px-4 py-3 text-slate-600">{row.area_manager || "-"}</td>
+                      <td className="px-4 py-3">
+                        {editingMapping === row.branch_code ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={editMappingVal}
+                              onChange={(e) => setEditMappingVal(e.target.value)}
+                              placeholder={row.branch_code}
+                              className="w-32 border border-purple-400 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-purple-500 uppercase"
+                              disabled={savingMapping}
+                            />
+                            <button
+                              onClick={() => void handleSaveMapping(row.branch_code)}
+                              disabled={savingMapping}
+                              className="text-xs font-medium text-white hover:bg-purple-700 bg-purple-600 px-3 py-1 rounded transition shadow-sm"
+                            >
+                              {savingMapping ? "..." : "Save"}
+                            </button>
+                            <button
+                              onClick={() => setEditingMapping(null)}
+                              disabled={savingMapping}
+                              className="text-xs font-medium text-slate-600 hover:bg-slate-200 bg-slate-100 px-3 py-1 rounded transition"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-3">
+                            <span className="font-semibold text-purple-700">{row.mapped_to || row.branch_code}</span>
+                            <button
+                              onClick={() => {
+                                setEditingMapping(row.branch_code);
+                                setEditMappingVal(row.mapped_to || row.branch_code);
+                              }}
+                              className="opacity-60 hover:opacity-100 transition whitespace-nowrap text-xs text-blue-600 underline"
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {modalBranches.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="px-4 py-8 text-center text-slate-500">
+                        No branches found matching your search.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

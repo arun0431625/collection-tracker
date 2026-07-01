@@ -1,11 +1,17 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import { useCollections } from "@/hooks/useCollections";
 import { CollectionRow } from "@/components/collections/CollectionRow";
 import { STATUS, StatusFilter } from "@/types/constants";
 import { GRRow } from "@/types/collections";
-import { fetchCollections } from "@/services/collections.api";
+import { fetchBranchLookup, fetchCollections } from "@/services/collections.api";
+import {
+  createBranchTransferRequest,
+  fetchTransferBranches,
+  type TransferBranchOption,
+} from "@/services/branchTransfers";
+import { getAppSetting } from "@/services/admin";
 import { toast } from "sonner";
 
 export default function Collections() {
@@ -39,6 +45,21 @@ export default function Collections() {
     isAdmin,
     canEdit,
   } = useCollections();
+  const [transferBranches, setTransferBranches] = useState<TransferBranchOption[]>([]);
+  const [requestingTransfer, setRequestingTransfer] = useState<string | null>(null);
+  const [transferEnabled, setTransferEnabled] = useState(true);
+
+  useEffect(() => {
+    fetchTransferBranches()
+      .then(setTransferBranches)
+      .catch((error) => {
+        console.error("Failed to load transfer branches", error);
+      });
+      
+    getAppSetting("transfer_enabled").then((val) => {
+      if (val !== null) setTransferEnabled(val);
+    });
+  }, []);
 
   function formatINR(amount: number) {
     return amount.toLocaleString("en-IN");
@@ -103,12 +124,26 @@ export default function Collections() {
       }
 
       const wb = XLSX.utils.book_new();
-      const data = allRows.map((r: any) => {
+      const branchLookup = await fetchBranchLookup(allRows.map((r: any) => r.branch_code));
+      const sortedRows = [...allRows].sort((a: any, b: any) => {
+        const branchCompare = String(a.branch_code || "").localeCompare(String(b.branch_code || ""));
+        if (branchCompare !== 0) return branchCompare;
+        return String(b.gr_date || "").localeCompare(String(a.gr_date || ""));
+      });
+
+      const data = sortedRows.map((r: any) => {
         const freight = r.total_freight || 0;
         const received = r.received_amount || 0;
         const capped = Math.min(received, freight);
+        const branchInfo = branchLookup.get(r.branch_code) || {
+          branch_name: r.branch_code || "",
+          area_manager: r.area_manager || "",
+        };
 
         return {
+          Branch_Code: r.branch_code || "",
+          Branch_Name: branchInfo.branch_name,
+          Area_Manager: branchInfo.area_manager || r.area_manager || "",
           GR_No: r.gr_no,
           Date: r.gr_date,
           Party: r.party_name,
@@ -124,11 +159,70 @@ export default function Collections() {
 
       const ws = XLSX.utils.json_to_sheet(data);
       XLSX.utils.book_append_sheet(wb, ws, "Collections");
+
+      if (isAdmin && !selectedBranch) {
+        const summary = Array.from(
+          sortedRows.reduce((map: Map<string, { branchName: string; areaManager: string; grs: number; freight: number; received: number; balance: number }>, r: any) => {
+            const code = r.branch_code || "";
+            const freight = r.total_freight || 0;
+            const received = Math.min(r.received_amount || 0, freight);
+            const branchInfo = branchLookup.get(code) || {
+              branch_name: code,
+              area_manager: r.area_manager || "",
+            };
+            const item = map.get(code) || {
+              branchName: branchInfo.branch_name,
+              areaManager: branchInfo.area_manager || r.area_manager || "",
+              grs: 0,
+              freight: 0,
+              received: 0,
+              balance: 0,
+            };
+            item.grs += 1;
+            item.freight += freight;
+            item.received += received;
+            item.balance += freight - received;
+            map.set(code, item);
+            return map;
+          }, new Map())
+        )
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([branchCode, item]) => ({
+            Branch_Code: branchCode,
+            Branch_Name: item.branchName,
+            Area_Manager: item.areaManager,
+            GRs: item.grs,
+            Freight: item.freight,
+            Received: item.received,
+            Balance: item.balance,
+          }));
+
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "Branch Summary");
+      }
+
       const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-      saveAs(new Blob([buf]), `Collections_${branch}.xlsx`);
+      const exportBranch = isAdmin ? selectedBranch || "All_Branches" : branch || "Branch";
+      saveAs(new Blob([buf]), `Collections_${exportBranch}.xlsx`);
       toast.success(`Export successful! ${allRows.length} rows exported.`, { id: toastId });
     } catch (e) {
       toast.error("Export failed.", { id: toastId });
+    }
+  }
+
+  async function handleRequestTransfer(r: GRRow, toBranchCode: string) {
+    const transferKey = `${r.branch_code}__${r.gr_no}`;
+    try {
+      setRequestingTransfer(transferKey);
+      await createBranchTransferRequest({
+        grNo: r.gr_no,
+        fromBranchCode: r.branch_code,
+        toBranchCode,
+      });
+      toast.success("Branch transfer request sent for admin approval.");
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to create transfer request.");
+    } finally {
+      setRequestingTransfer(null);
     }
   }
 
@@ -282,7 +376,7 @@ export default function Collections() {
               <th className="px-1 py-1.5 font-semibold tracking-wide text-center align-middle w-[8%] bg-slate-800 text-slate-200 border-r border-slate-700">Received</th>
               <th className="px-1 py-1.5 font-semibold tracking-wide text-center align-middle w-[10%] bg-slate-800 text-slate-200 border-r border-slate-700">Payment Date</th>
               <th className="px-1 py-1.5 font-semibold tracking-wide text-center align-middle w-[8%] bg-slate-800 text-slate-200 border-r border-slate-700">Ref No</th>
-              <th className="px-1 py-1.5 font-semibold tracking-wide text-center align-middle w-[6%] bg-slate-800 text-slate-200 border-r border-slate-700">Remarks</th>
+              <th className="px-1 py-1.5 font-semibold tracking-wide text-center align-middle w-[6%] bg-slate-800 text-slate-200 border-r border-slate-700">Transfer</th>
               
               <th className="px-1 py-1.5 font-semibold tracking-wide text-center align-middle w-[7%] bg-slate-800 text-slate-200 border-r border-slate-700">Status</th>
               <th className="px-1 py-1.5 font-semibold tracking-wide text-center align-middle w-[5%] bg-slate-800 text-slate-200">Action</th>
@@ -303,7 +397,7 @@ export default function Collections() {
 
                 return (
                   <CollectionRow
-                    key={r.gr_no}
+                    key={`${r.branch_code}__${r.gr_no}`}
                     r={r}
                     e={e}
                     canEdit={canEdit}
@@ -311,7 +405,11 @@ export default function Collections() {
                     savedRow={savedRow}
                     handleChange={handleChange}
                     handleSave={handleSave}
-                    status={status}
+                    handleRequestTransfer={handleRequestTransfer}
+                    transferBranches={transferBranches}
+                    requestingTransfer={requestingTransfer}
+                    transferEnabled={transferEnabled}
+                    status={r.status as StatusFilter}
                     days={days}
                     overdue={overdue}
                     rowClass={rowClass}

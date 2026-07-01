@@ -19,7 +19,7 @@ BEGIN
         FROM collections_lrs
         WHERE 
             gr_date >= CURRENT_DATE - (p_days || ' days')::INTERVAL
-            AND (p_branch IS NULL OR branch_code = p_branch)
+            AND (p_branch IS NULL OR upper(branch_code) IN (SELECT branch_code FROM public.get_mapped_branches(p_branch)))
         GROUP BY gr_date
     ),
     collections AS (
@@ -31,7 +31,7 @@ BEGIN
         WHERE 
             payment_date IS NOT NULL 
             AND payment_date >= CURRENT_DATE - (p_days || ' days')::INTERVAL
-            AND (p_branch IS NULL OR branch_code = p_branch)
+            AND (p_branch IS NULL OR upper(branch_code) IN (SELECT branch_code FROM public.get_mapped_branches(p_branch)))
         GROUP BY payment_date
     ),
     all_dates AS (

@@ -77,9 +77,12 @@ export async function signInWithBranchPassword(
 }
 
 export async function signOutCurrentUser() {
-  const { error } = await supabase.auth.signOut();
-
-  if (error) {
-    throw error;
+  try {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.warn("Supabase signOut returned an error:", error.message);
+    }
+  } catch (err) {
+    console.error("Critical error during supabase.auth.signOut():", err);
   }
 }

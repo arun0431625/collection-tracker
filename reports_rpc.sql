@@ -22,7 +22,7 @@ BEGIN
     FROM collections_lrs c
     WHERE c.gr_date >= p_from_date 
       AND c.gr_date <= p_to_date
-      AND (p_branch_code IS NULL OR c.branch_code = p_branch_code)
+      AND (p_branch_code IS NULL OR upper(c.branch_code) IN (SELECT branch_code FROM public.get_mapped_branches(p_branch_code)))
     GROUP BY c.branch_code;
 END;
 $$ LANGUAGE plpgsql;
@@ -51,7 +51,7 @@ BEGIN
     FROM collections_lrs c
     WHERE c.gr_date >= p_from_date 
       AND c.gr_date <= p_to_date
-      AND (p_branch_code IS NULL OR c.branch_code = p_branch_code)
+      AND (p_branch_code IS NULL OR upper(c.branch_code) IN (SELECT branch_code FROM public.get_mapped_branches(p_branch_code)))
     GROUP BY COALESCE(NULLIF(c.area_manager, ''), 'UNKNOWN');
 END;
 $$ LANGUAGE plpgsql;
@@ -75,7 +75,7 @@ BEGIN
         FROM collections_lrs c
         WHERE c.gr_date >= p_from_date 
           AND c.gr_date <= p_to_date
-          AND (p_branch_code IS NULL OR c.branch_code = p_branch_code)
+          AND (p_branch_code IS NULL OR upper(c.branch_code) IN (SELECT branch_code FROM public.get_mapped_branches(p_branch_code)))
     ),
     categorized AS (
         SELECT 

@@ -12,6 +12,35 @@ export async function fetchAccessibleCollectionBranchCodes() {
   );
 }
 
+export async function fetchBranchLookup(branchCodes: string[]) {
+  const uniqueCodes = Array.from(
+    new Set(branchCodes.map((code) => code?.trim().toUpperCase()).filter(Boolean))
+  );
+
+  if (!uniqueCodes.length) return new Map<string, { branch_name: string; area_manager: string }>();
+
+  const lookup = new Map<string, { branch_name: string; area_manager: string }>();
+
+  for (let i = 0; i < uniqueCodes.length; i += 500) {
+    const chunk = uniqueCodes.slice(i, i + 500);
+    const { data, error } = await supabase
+      .from("branches")
+      .select("branch_code, branch_name, area_manager")
+      .in("branch_code", chunk);
+
+    if (error) throw error;
+
+    (data || []).forEach((row) => {
+      lookup.set(row.branch_code, {
+        branch_name: row.branch_name || row.branch_code,
+        area_manager: row.area_manager || "",
+      });
+    });
+  }
+
+  return lookup;
+}
+
 export async function fetchCollections({
   branch,
   role,
