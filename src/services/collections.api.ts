@@ -41,6 +41,22 @@ export async function fetchBranchLookup(branchCodes: string[]) {
   return lookup;
 }
 
+// Cache sub-branch code lookups to avoid repeated DB calls
+const subBranchCache = new Map<string, string[]>();
+
+async function getSubBranchCodes(controllingBranch: string): Promise<string[]> {
+  if (subBranchCache.has(controllingBranch)) {
+    return subBranchCache.get(controllingBranch)!;
+  }
+  const { data, error } = await supabase.rpc("get_sub_branch_codes", {
+    p_controlling_branch: controllingBranch,
+  });
+  if (error) throw error;
+  const codes = ((data || []) as { branch_code: string }[]).map((r) => r.branch_code);
+  subBranchCache.set(controllingBranch, codes);
+  return codes;
+}
+
 export async function fetchCollections({
   branch,
   role,
@@ -68,12 +84,19 @@ export async function fetchCollections({
 
   // Branch filter
   if (role !== "ADMIN") {
-    // Branch user: only see their own branch_code
+    // Branch user: only their own branch_code — fast eq
     query = query.eq("branch_code", branch);
   } else if (branch) {
-    // Admin selecting a controlling branch: include all sub-branches mapped to it
-    query = query.eq("controlling_branch", branch);
+    // Admin: get all sub-branches mapped to this controlling branch, then use .in()
+    const subCodes = await getSubBranchCodes(branch);
+    if (subCodes.length === 0) {
+      // No sub-branches found — filter by the branch itself
+      query = query.eq("branch_code", branch);
+    } else {
+      query = query.in("branch_code", subCodes);
+    }
   }
+  // If admin with no branch selected — no filter, show all
 
   // Status filter
   if (status !== "ALL") {
