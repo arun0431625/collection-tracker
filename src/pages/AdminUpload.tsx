@@ -267,12 +267,14 @@ export default function AdminUpload() {
     if (!validRowsCache.length) return null;
     const map = new Map<string, { areaManager: string; grCount: number; totalFreight: number }>();
     validRowsCache.forEach((row) => {
-      const existing = map.get(row.branch_code);
+      // Use controlling branch if specified in the sheet, else actual branch
+      const effectiveBranch = row.controlling_branch || row.branch_code;
+      const existing = map.get(effectiveBranch);
       if (existing) {
         existing.grCount += 1;
         existing.totalFreight += row.total_freight || 0;
       } else {
-        map.set(row.branch_code, {
+        map.set(effectiveBranch, {
           areaManager: row.area_manager,
           grCount: 1,
           totalFreight: row.total_freight || 0,
