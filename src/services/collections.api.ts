@@ -48,7 +48,7 @@ export async function fetchCollections({
   pageSize,
   status,
   search,
-  month
+  month,
 }: {
   branch: string;
   role: "ADMIN" | "BRANCH";
@@ -58,53 +58,41 @@ export async function fetchCollections({
   search: string;
   month?: string;
 }) {
-
   let query = supabase
     .from("collections_with_status")
-    .select(`
-  gr_no,
-  area_manager,
-  branch_code,
-  gr_date,
-  party_name,
-  total_freight,
-  pay_mode,
-  payment_mode,
-  received_amount,
-  payment_date,
-  ref_no,
-  remarks,
-  status_calc
-`, { count: "exact" });
+    .select(
+      `gr_no, area_manager, branch_code, gr_date, party_name, total_freight,
+       pay_mode, payment_mode, received_amount, payment_date, ref_no, remarks, status_calc`,
+      { count: "exact" }
+    );
 
   // Branch filter
-    if (role !== "ADMIN") {
-      query = query.eq("branch_code", branch);
-    } else if (branch) {
-      query = query.eq("branch_code", branch);
-    }
+  if (role !== "ADMIN") {
+    // Branch user: only see their own branch_code
+    query = query.eq("branch_code", branch);
+  } else if (branch) {
+    // Admin selecting a controlling branch: include all sub-branches mapped to it
+    query = query.eq("controlling_branch", branch);
+  }
 
-// Status filter (correct working logic)
+  // Status filter
+  if (status !== "ALL") {
+    query = query.eq("status_calc", status);
+  }
 
-if (status !== "ALL") {
-  query = query.eq("status_calc", status);
-}
+  // Month filter
+  if (month) {
+    const start = `${month}-01`;
+    const end = new Date(month + "-01");
+    end.setMonth(end.getMonth() + 1);
+    query = query
+      .gte("gr_date", start)
+      .lt("gr_date", end.toISOString().slice(0, 10));
+  }
 
-// Month filter
-if (month) {
-  const start = `${month}-01`;
-  const end = new Date(month + "-01");
-  end.setMonth(end.getMonth() + 1);
-
-  query = query
-    .gte("gr_date", start)
-    .lt("gr_date", end.toISOString().slice(0, 10));
-}
   // Search
   if (search.trim()) {
-    query = query.or(
-      `gr_no.ilike.%${search}%,party_name.ilike.%${search}%`
-    );
+    query = query.or(`gr_no.ilike.%${search}%,party_name.ilike.%${search}%`);
   }
 
   // Pagination
@@ -119,7 +107,7 @@ if (month) {
 
   return {
     rows: data || [],
-    totalCount: count || 0
+    totalCount: count || 0,
   };
 }
 
@@ -151,6 +139,6 @@ export async function updateCollectionPayment(
 
 export async function fetchCollectionMonths() {
   const { data, error } = await supabase.rpc("get_collection_months");
-  if (error) throw (error as any);
+  if (error) throw error as any;
   return (data || []) as { value: string; label: string }[];
 }
