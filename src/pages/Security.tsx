@@ -189,15 +189,15 @@ export default function Security() {
 
   async function handleSaveMapping(branchCode: string) {
     const val = editMappingVal.trim().toUpperCase();
-    if (branchCode === val) {
-      alert("A branch cannot be mapped to itself");
+    if (!val) {
+      alert("Controlling branch cannot be empty");
       return;
     }
     setSavingMapping(true);
     try {
       await mapBranchToMain(branchCode, val);
       setRows((prev) =>
-        prev.map((r) => (r.branch_code === branchCode ? { ...r, mapped_to: val || null } : r))
+        prev.map((r) => (r.branch_code === branchCode ? { ...r, mapped_to: val } : r))
       );
       setEditingMapping(null);
     } catch (err) {
