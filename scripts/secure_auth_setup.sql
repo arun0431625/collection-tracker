@@ -418,35 +418,37 @@
   end;
   $$;
 
-  create or replace function public.admin_list_branch_security_rows()
-  returns table (
+  CREATE OR REPLACE FUNCTION public.admin_list_branch_security_rows()
+  RETURNS TABLE (
     id text,
     branch_code text,
+    username text,
     area_manager text,
     is_active boolean,
     password_changed_at timestamptz,
     mapped_to text
   )
-  language plpgsql
-  security definer
-  set search_path = public, auth
-  as $$
-  begin
-    if not public.is_current_admin() then
-      raise exception 'Only admin can view branch security rows';
-    end if;
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path = public, auth
+  AS $$
+  BEGIN
+    IF NOT public.is_current_admin() THEN
+      RAISE EXCEPTION 'Only admin can view branch security rows';
+    END IF;
 
-    return query
-    select
+    RETURN QUERY
+    SELECT
       b.id::text,
       b.branch_code::text,
+      b.username::text,
       b.area_manager::text,
       coalesce(b.is_active, false)::boolean as is_active,
       b.password_changed_at::timestamptz,
       b.mapped_to::text
-    from public.branches b
-    order by b.branch_code;
-  end;
+    FROM public.branches b
+    ORDER BY b.branch_code;
+  END;
   $$;
 
   create or replace function public.admin_get_branch_delete_summary(p_branch_code text)

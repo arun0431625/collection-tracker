@@ -387,9 +387,14 @@ export default function Security() {
           </div>
         </div>
 
-        <div className="rounded border bg-white p-4">
+        <div className="rounded border bg-white p-4 flex flex-col justify-between">
           <div className="text-xs text-gray-500">Total Branches</div>
-          <div className="text-xl font-semibold">{totalBranches}</div>
+          <div className="text-xl font-semibold flex items-baseline">
+            {totalBranches}
+            <span className="text-xs font-medium text-purple-600 ml-2 bg-purple-50 px-2 py-0.5 rounded-full">
+              Mapped to {rows.filter(r => !r.mapped_to || r.mapped_to === r.branch_code).length} Controlling
+            </span>
+          </div>
         </div>
 
         <div className="rounded border bg-white p-4">
@@ -601,7 +606,12 @@ export default function Security() {
                 <tbody>
                   {modalBranches.map((row) => (
                     <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
-                      <td className="px-4 py-3 font-medium text-slate-800">{row.branch_code}</td>
+                      <td className="px-4 py-3 text-slate-800">
+                        <div className="font-medium">{row.branch_code}</div>
+                        {row.username && row.username !== row.branch_code && (
+                          <div className="text-xs text-slate-500 mt-0.5">Alias: {row.username}</div>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-slate-600">{row.area_manager || "-"}</td>
                       <td className="px-4 py-3">
                         {editingMapping === row.branch_code ? (
