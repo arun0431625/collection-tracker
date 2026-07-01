@@ -224,27 +224,22 @@
       raise exception 'Only admin can insert collections';
     end if;
 
-    -- Auto-create branches for any new branch_code in the upload
-    for branch_rec in
-      select distinct upper(trim(x.branch_code)) as bc, x.area_manager as am, upper(trim(x.controlling_branch)) as cb
-      from jsonb_to_recordset(p_rows) as x(branch_code text, area_manager text, controlling_branch text)
-      where upper(trim(x.branch_code)) <> ''
-    loop
-      -- Create branch row if not exists
-      insert into public.branches (id, branch_code, branch_name, area_manager, role, is_active, must_change_password, password_hash, mapped_to)
-      values (gen_random_uuid(), branch_rec.bc, branch_rec.bc, branch_rec.am, 'BRANCH', true, true, 'legacy_auth_removed', coalesce(nullif(branch_rec.cb, ''), branch_rec.bc))
-      on conflict (branch_code) do update set 
-        area_manager = excluded.area_manager,
-        mapped_to = coalesce(excluded.mapped_to, branches.mapped_to);
-
-      -- Create auth user if not exists
-      target_email := public.branch_email(branch_rec.bc);
-      if not exists (select 1 from auth.users where lower(email) = target_email) then
-        new_user_id := gen_random_uuid();
-        insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, confirmation_token, email_change, email_change_token_new, recovery_token)
         values ('00000000-0000-0000-0000-000000000000', new_user_id, 'authenticated', 'authenticated', target_email, extensions.crypt('Branch@123', extensions.gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{}'::jsonb, now(), now(), '', '', '', '');
         insert into auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
         values (gen_random_uuid(), new_user_id, jsonb_build_object('sub', new_user_id::text, 'email', target_email), 'email', target_email, now(), now(), now());
+      end if;
+    end loop;
+
+    -- PASS 2: Update controlled mappings now that all branches exist
+    for branch_rec in
+      select distinct upper(trim(x.branch_code)) as bc, upper(trim(x.controlling_branch)) as cb
+      from jsonb_to_recordset(p_rows) as x(branch_code text, controlling_branch text)
+      where upper(trim(x.branch_code)) <> ''
+        and upper(trim(x.controlling_branch)) <> ''
+        and upper(trim(x.controlling_branch)) <> upper(trim(x.branch_code))
+    loop
+      if exists (select 1 from public.branches where branch_code = branch_rec.cb) then
+        update public.branches set mapped_to = branch_rec.cb where branch_code = branch_rec.bc;
       end if;
     end loop;
 

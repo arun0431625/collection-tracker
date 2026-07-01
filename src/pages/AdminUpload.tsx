@@ -322,8 +322,24 @@ export default function AdminUpload() {
         setCollectionUpdatedCount(0);
         setCollectionImpactAmount(0);
         setStage("VALIDATED");
-        // Manual persist after validation
-        setTimeout(persistState, 0);
+        // Persist immediately with the actual new values (not stale state closure)
+        saveState({
+          stage: "VALIDATED",
+          totalRows: raw.length,
+          validCount: validRows.length,
+          invalidCount: raw.length - validRows.length,
+          newCount: 0,
+          duplicateCount: 0,
+          newInsertAmount: 0,
+          overwriteOldAmount: 0,
+          overwriteNewAmount: 0,
+          overwriteNetImpact: 0,
+          collectionUpdatedCount: 0,
+          collectionImpactAmount: 0,
+          rawRowsCache: raw,
+          validRowsCache: validRows,
+          fileName: file.name,
+        });
         if (validRows.length) {
           toast.success("File validation complete!");
         } else {
