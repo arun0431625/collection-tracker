@@ -11,7 +11,8 @@ import {
   ChevronRight,
   ArrowRightLeft
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getSubBranchCodes } from "../../services/collections.api";
 
 type SidebarProps = {
   onLogout: () => void | Promise<void>;
@@ -20,6 +21,19 @@ type SidebarProps = {
 export default function Sidebar({ onLogout }: SidebarProps) {
   const { role, branch } = useBranch();
   const [collapsed, setCollapsed] = useState(false);
+  const [subBranches, setSubBranches] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (role !== "ADMIN" && branch) {
+      getSubBranchCodes(branch).then((codes) => {
+        // Filter out the controlling branch itself to only show actual sub-branches
+        const actualSubBranches = codes.filter((c) => c !== branch);
+        if (actualSubBranches.length > 0) {
+          setSubBranches(actualSubBranches);
+        }
+      });
+    }
+  }, [role, branch]);
 
   return (
     <aside
@@ -34,9 +48,22 @@ export default function Sidebar({ onLogout }: SidebarProps) {
             <h1 className="text-base font-semibold tracking-wide">
               Collection Tracker
             </h1>
-            <p className="text-xs text-slate-400">
-              {role === "ADMIN" ? "Admin Panel" : branch}
-            </p>
+            <div className="text-xs text-slate-400 mt-0.5">
+              {role === "ADMIN" ? (
+                <span>Admin Panel</span>
+              ) : (
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-medium text-slate-300">{branch}</span>
+                  {subBranches.length > 0 && (
+                    <div className="pl-2 border-l border-slate-600 mt-1 flex flex-col gap-0.5 text-[10px] leading-tight text-slate-500">
+                      {subBranches.map((sb) => (
+                        <span key={sb}>↳ {sb}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

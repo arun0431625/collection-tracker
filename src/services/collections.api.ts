@@ -44,7 +44,7 @@ export async function fetchBranchLookup(branchCodes: string[]) {
 // Cache sub-branch code lookups to avoid repeated DB calls
 const subBranchCache = new Map<string, string[]>();
 
-async function getSubBranchCodes(controllingBranch: string): Promise<string[]> {
+export async function getSubBranchCodes(controllingBranch: string): Promise<string[]> {
   if (subBranchCache.has(controllingBranch)) {
     return subBranchCache.get(controllingBranch)!;
   }
