@@ -22,6 +22,7 @@ export default function Sidebar({ onLogout }: SidebarProps) {
   const { role, branch } = useBranch();
   const [collapsed, setCollapsed] = useState(false);
   const [subBranches, setSubBranches] = useState<string[]>([]);
+  const [showAllSubBranches, setShowAllSubBranches] = useState(false);
 
   useEffect(() => {
     if (role !== "ADMIN" && branch) {
@@ -56,9 +57,17 @@ export default function Sidebar({ onLogout }: SidebarProps) {
                   <span className="font-medium text-slate-300">{branch}</span>
                   {subBranches.length > 0 && (
                     <div className="pl-2 border-l border-slate-600 mt-1 flex flex-col gap-0.5 text-[10px] leading-tight text-slate-500">
-                      {subBranches.map((sb) => (
+                      {(showAllSubBranches ? subBranches : subBranches.slice(0, 3)).map((sb) => (
                         <span key={sb}>↳ {sb}</span>
                       ))}
+                      {subBranches.length > 3 && (
+                        <button 
+                          onClick={() => setShowAllSubBranches(!showAllSubBranches)}
+                          className="text-left text-[#3b82f6] hover:text-[#60a5fa] mt-0.5 font-medium"
+                        >
+                          {showAllSubBranches ? "Show less" : `+${subBranches.length - 3} more`}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
