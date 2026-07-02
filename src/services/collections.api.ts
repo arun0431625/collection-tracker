@@ -58,6 +58,14 @@ export async function getSubBranchCodes(controllingBranch: string): Promise<stri
   return codes;
 }
 
+export async function getSubBranchDetails(controllingBranch: string): Promise<{ branch_code: string; pending_count: number }[]> {
+  const { data, error } = await supabase.rpc("get_sub_branch_codes", {
+    p_controlling_branch: controllingBranch,
+  });
+  if (error) throw error;
+  return (data || []) as { branch_code: string; pending_count: number }[];
+}
+
 export async function fetchCollections({
   branch,
   role,

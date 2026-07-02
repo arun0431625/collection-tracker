@@ -12,7 +12,7 @@ import {
   ArrowRightLeft
 } from "lucide-react";
 import { useState, useEffect } from "react";
-import { getSubBranchCodes } from "../../services/collections.api";
+import { getSubBranchDetails } from "../../services/collections.api";
 
 type SidebarProps = {
   onLogout: () => void | Promise<void>;
@@ -21,16 +21,21 @@ type SidebarProps = {
 export default function Sidebar({ onLogout }: SidebarProps) {
   const { role, branch } = useBranch();
   const [collapsed, setCollapsed] = useState(false);
-  const [subBranches, setSubBranches] = useState<string[]>([]);
+  const [subBranches, setSubBranches] = useState<{ branch_code: string; pending_count: number }[]>([]);
   const [showAllSubBranches, setShowAllSubBranches] = useState(false);
+  const [mainPendingCount, setMainPendingCount] = useState<number | null>(null);
 
   useEffect(() => {
     if (role !== "ADMIN" && branch) {
-      getSubBranchCodes(branch).then((codes) => {
+      getSubBranchDetails(branch).then((details) => {
         // Filter out the controlling branch itself to only show actual sub-branches
-        const actualSubBranches = codes.filter((c) => c !== branch);
+        const actualSubBranches = details.filter((c) => c.branch_code !== branch);
         if (actualSubBranches.length > 0) {
           setSubBranches(actualSubBranches);
+        }
+        const mainBranchDetail = details.find((c) => c.branch_code === branch);
+        if (mainBranchDetail) {
+          setMainPendingCount(mainBranchDetail.pending_count);
         }
       });
     }
@@ -54,11 +59,21 @@ export default function Sidebar({ onLogout }: SidebarProps) {
                 <span>Admin Panel</span>
               ) : (
                 <div className="flex flex-col gap-0.5">
-                  <span className="font-medium text-slate-300">{branch}</span>
+                  <span className="font-medium text-slate-300">
+                    {branch}
+                    {mainPendingCount !== null && mainPendingCount > 0 && (
+                      <span className="text-red-400 ml-1">({mainPendingCount})</span>
+                    )}
+                  </span>
                   {subBranches.length > 0 && (
                     <div className="pl-2 border-l border-slate-600 mt-1 flex flex-col gap-0.5 text-[10px] leading-tight text-slate-500">
                       {(showAllSubBranches ? subBranches : subBranches.slice(0, 3)).map((sb) => (
-                        <span key={sb}>↳ {sb}</span>
+                        <span key={sb.branch_code}>
+                          ↳ {sb.branch_code}
+                          {sb.pending_count > 0 && (
+                            <span className="text-red-400/90 ml-1 font-medium">({sb.pending_count})</span>
+                          )}
+                        </span>
                       ))}
                       {subBranches.length > 3 && (
                         <button 
