@@ -101,6 +101,13 @@ export async function resetBranchPassword(branchCode: string) {
   }
 }
 
+export async function resetAllBranchPasswords() {
+  const { error } = await supabase.rpc("admin_reset_all_branch_passwords");
+
+  if (error) {
+    throw new Error(getErrorMessage(error));
+  }
+}
 export async function setBranchActive(branchCode: string, isActive: boolean) {
   const { error } = await supabase.rpc("admin_set_branch_active", {
     p_branch_code: branchCode,

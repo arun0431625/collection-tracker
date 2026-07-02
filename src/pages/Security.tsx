@@ -7,6 +7,7 @@ import {
   fetchSecurityRows,
   deleteBranch,
   resetBranchPassword,
+  resetAllBranchPasswords,
   setBranchActive,
   updateBranchUsername,
   mapBranchToMain,
@@ -46,6 +47,7 @@ export default function Security() {
   const [modalSearch, setModalSearch] = useState("");
 
   const [transferEnabled, setTransferEnabled] = useState(true);
+  const [resettingAll, setResettingAll] = useState(false);
 
   const totalBranches = rows.length;
   const activeCount = rows.filter((r) => r.is_active).length;
@@ -164,6 +166,28 @@ export default function Security() {
       );
     } catch (err) {
       alert(err instanceof Error ? err.message : "Reset failed");
+    }
+  }
+
+  async function handleResetAll() {
+    const confirmed = window.confirm(
+      `⚠️ Reset ALL branch passwords?\n\nAll branches (except Admin) will be set to:\n  Password: Branch@123\n\nEach branch will be forced to set a new password on next login.\n\nThis action cannot be undone. Confirm?`
+    );
+    if (!confirmed) return;
+
+    setResettingAll(true);
+    try {
+      await resetAllBranchPasswords();
+      alert(`✅ All branch passwords reset to Branch@123 successfully.\n\nBranches will be prompted to change password on next login.`);
+      setRows((prev) =>
+        prev.map((row) =>
+          row.branch_code !== "ADMIN" ? { ...row, password_changed_at: null } : row
+        )
+      );
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Bulk reset failed");
+    } finally {
+      setResettingAll(false);
     }
   }
 
@@ -291,12 +315,32 @@ export default function Security() {
           <div className="text-xs text-gray-400">
             Logged in as: <b>HO (Admin)</b>
           </div>
-          <button
-            onClick={() => setShowMappingModal(true)}
-            className="rounded bg-purple-600 px-3 py-1.5 text-xs text-white hover:bg-purple-700 shadow-sm transition"
-          >
-            Branch Mapping
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleResetAll}
+              disabled={resettingAll}
+              className="rounded bg-red-600 px-3 py-1.5 text-xs text-white hover:bg-red-700 shadow-sm transition disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5"
+            >
+              {resettingAll ? (
+                <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                  <path d="M3 3v5h5"/>
+                </svg>
+              )}
+              {resettingAll ? "Resetting..." : "Reset All Passwords"}
+            </button>
+            <button
+              onClick={() => setShowMappingModal(true)}
+              className="rounded bg-purple-600 px-3 py-1.5 text-xs text-white hover:bg-purple-700 shadow-sm transition"
+            >
+              Branch Mapping
+            </button>
+          </div>
         </div>
       </div>
 
