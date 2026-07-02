@@ -26,6 +26,7 @@ export async function fetchTransferBranches() {
   const { data, error } = await supabase
     .from("branches")
     .select("branch_code, branch_name, area_manager")
+    .neq("branch_code", "ADMIN")
     .order("branch_code", { ascending: true });
 
   if (error) throw error;
