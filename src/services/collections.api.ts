@@ -85,13 +85,20 @@ export async function fetchCollections({
 
   // Branch filter
   if (branch) {
-    // Get all sub-branches mapped to this controlling branch, then use .in()
-    const subCodes = await getSubBranchCodes(branch);
-    if (subCodes.length === 0) {
-      // No sub-branches found — filter by the branch itself
-      query = query.eq("branch_code", branch);
+    const isExact = branch.startsWith("EXACT:");
+    const actualBranch = isExact ? branch.substring(6) : branch;
+
+    if (isExact) {
+      query = query.eq("branch_code", actualBranch);
     } else {
-      query = query.in("branch_code", subCodes);
+      // Get all sub-branches mapped to this controlling branch, then use .in()
+      const subCodes = await getSubBranchCodes(actualBranch);
+      if (subCodes.length === 0) {
+        // No sub-branches found — filter by the branch itself
+        query = query.eq("branch_code", actualBranch);
+      } else {
+        query = query.in("branch_code", subCodes);
+      }
     }
   }
 

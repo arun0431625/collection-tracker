@@ -37,7 +37,9 @@ export function useCollections() {
   const [selectedMonth, setSelectedMonth] = useSessionStorageState<string>("coll_month", "");
   const [selectedBranch, setSelectedBranch] = useSessionStorageState<string>("coll_branch", "");
   
-  const effectiveBranch = isAdmin ? selectedBranch || null : selectedBranch || branch;
+  const effectiveBranch = isAdmin 
+    ? (selectedBranch || null) 
+    : (selectedBranch ? `EXACT:${selectedBranch}` : branch);
   const [branchOptions, setBranchOptions] = useState<string[]>([]);
   const [monthOptions, setMonthOptions] = useState<{ value: string; label: string }[]>([]);
   const deferredSearch = useDeferredValue(search);

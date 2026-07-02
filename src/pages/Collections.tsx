@@ -234,16 +234,39 @@ export default function Collections() {
 
   return (
     <div className="p-4 space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold">
-          Collections
-          <span className="text-sm font-normal text-gray-500">
-            {" "}· Branch {branch}
-          </span>
-        </h1>
-        <div className="text-xs text-gray-500 mt-0.5">
-          Update received payments and track pending GRs
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">
+            Collections
+            <span className="text-sm font-normal text-gray-500">
+              {" "}· Branch {branch}
+            </span>
+          </h1>
+          <div className="text-xs text-gray-500 mt-0.5">
+            Update received payments and track pending GRs
+          </div>
         </div>
+
+        {branchOptions.length > 1 && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-gray-700">Branch:</span>
+            <select
+              className="w-full sm:w-auto min-w-[150px] px-3 py-1.5 border border-slate-300 rounded-md text-sm bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+              value={selectedBranch}
+              onChange={(e) => {
+                setCurrentPage(1);
+                setSelectedBranch(e.target.value);
+              }}
+            >
+              <option value="">All Branches</option>
+              {branchOptions.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* KPI BAR */}
@@ -292,39 +315,25 @@ export default function Collections() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <select
-          value={selectedMonth}
-          onChange={(e) => {
-            setCurrentPage(1);
-            setSelectedMonth(e.target.value);
-          }}
-          className="border px-3 py-2 rounded-md text-sm ml-2 bg-white"
-        >
-          <option value="">All Months</option>
-          {(monthOptions || []).map((m) => (
-            <option key={m.value} value={m.value}>
-              {m.label}
-            </option>
-          ))}
-        </select>
-        
-        {branchOptions.length > 1 && (
+        <div className="flex items-center gap-2 ml-2">
+          <span className="text-sm font-bold text-gray-700">Month:</span>
           <select
-            className="w-full sm:w-auto min-w-[140px] px-3 py-1.5 border border-slate-300 rounded text-sm bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-            value={selectedBranch}
+            value={selectedMonth}
             onChange={(e) => {
               setCurrentPage(1);
-              setSelectedBranch(e.target.value);
+              setSelectedMonth(e.target.value);
             }}
+            className="border px-3 py-1.5 rounded-md text-sm bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
-            <option value="">{isAdmin ? "All Branches" : "All Sub-Branches"}</option>
-            {branchOptions.map((b) => (
-              <option key={b} value={b}>
-                {b}
+            <option value="">All Months</option>
+            {(monthOptions || []).map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
               </option>
             ))}
           </select>
-        )}
+        </div>
+        
       </div>
 
       {/* EXPORT + AGING SUMMARY */}
