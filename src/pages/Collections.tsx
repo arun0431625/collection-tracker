@@ -41,6 +41,7 @@ export default function Collections() {
     handleChange,
     handleSave,
     branch,
+    effectiveBranch,
     role,
     isAdmin,
     canEdit,
@@ -109,7 +110,7 @@ export default function Collections() {
       const chunkSize = 1000;
       while (true) {
         const result = await fetchCollections({
-          branch: isAdmin ? selectedBranch || "" : branch || "",
+          branch: effectiveBranch as string,
           role: role as "ADMIN" | "BRANCH",
           page,
           pageSize: chunkSize,
@@ -138,9 +139,11 @@ export default function Collections() {
         const branchInfo = branchLookup.get(r.branch_code) || {
           branch_name: r.branch_code || "",
           area_manager: r.area_manager || "",
+          mapped_to: r.branch_code || "",
         };
 
         return {
+          Controlling_Branch: branchInfo.mapped_to,
           Branch_Code: r.branch_code || "",
           Branch_Name: branchInfo.branch_name,
           Area_Manager: branchInfo.area_manager || r.area_manager || "",
@@ -169,8 +172,10 @@ export default function Collections() {
             const branchInfo = branchLookup.get(code) || {
               branch_name: code,
               area_manager: r.area_manager || "",
+              mapped_to: code,
             };
             const item = map.get(code) || {
+              controllingBranch: branchInfo.mapped_to,
               branchName: branchInfo.branch_name,
               areaManager: branchInfo.area_manager || r.area_manager || "",
               grs: 0,
@@ -187,21 +192,22 @@ export default function Collections() {
           }, new Map())
         )
           .sort(([a], [b]) => a.localeCompare(b))
-          .map(([branchCode, item]) => ({
-            Branch_Code: branchCode,
-            Branch_Name: item.branchName,
-            Area_Manager: item.areaManager,
-            GRs: item.grs,
-            Freight: item.freight,
-            Received: item.received,
-            Balance: item.balance,
+          .map(([key, val]) => ({
+            Controlling_Branch: val.controllingBranch,
+            Branch_Code: key,
+            Branch_Name: val.branchName,
+            Area_Manager: val.areaManager,
+            GRs: val.grs,
+            Freight: val.freight,
+            Received: val.received,
+            Balance: val.balance,
           }));
 
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "Branch Summary");
       }
 
       const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-      const exportBranch = isAdmin ? selectedBranch || "All_Branches" : branch || "Branch";
+      const exportBranch = selectedBranch || "All_Branches";
       saveAs(new Blob([buf]), `Collections_${exportBranch}.xlsx`);
       toast.success(`Export successful! ${allRows.length} rows exported.`, { id: toastId });
     } catch (e) {
@@ -302,18 +308,20 @@ export default function Collections() {
           ))}
         </select>
         
-        {isAdmin && (
+        {branchOptions.length > 1 && (
           <select
+            className="w-full sm:w-auto min-w-[140px] px-3 py-1.5 border border-slate-300 rounded text-sm bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
             value={selectedBranch}
             onChange={(e) => {
               setCurrentPage(1);
               setSelectedBranch(e.target.value);
             }}
-            className="border px-3 py-2 rounded-md text-sm ml-2"
           >
-            <option value="">All Branches</option>
+            <option value="">{isAdmin ? "All Branches" : "All Sub-Branches"}</option>
             {branchOptions.map((b) => (
-              <option key={b} value={b}>{b}</option>
+              <option key={b} value={b}>
+                {b}
+              </option>
             ))}
           </select>
         )}

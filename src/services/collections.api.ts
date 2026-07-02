@@ -17,15 +17,15 @@ export async function fetchBranchLookup(branchCodes: string[]) {
     new Set(branchCodes.map((code) => code?.trim().toUpperCase()).filter(Boolean))
   );
 
-  if (!uniqueCodes.length) return new Map<string, { branch_name: string; area_manager: string }>();
+  if (!uniqueCodes.length) return new Map<string, { branch_name: string; area_manager: string; mapped_to: string }>();
 
-  const lookup = new Map<string, { branch_name: string; area_manager: string }>();
+  const lookup = new Map<string, { branch_name: string; area_manager: string; mapped_to: string }>();
 
   for (let i = 0; i < uniqueCodes.length; i += 500) {
     const chunk = uniqueCodes.slice(i, i + 500);
     const { data, error } = await supabase
       .from("branches")
-      .select("branch_code, branch_name, area_manager")
+      .select("branch_code, branch_name, area_manager, mapped_to")
       .in("branch_code", chunk);
 
     if (error) throw error;
@@ -34,6 +34,7 @@ export async function fetchBranchLookup(branchCodes: string[]) {
       lookup.set(row.branch_code, {
         branch_name: row.branch_name || row.branch_code,
         area_manager: row.area_manager || "",
+        mapped_to: row.mapped_to || row.branch_code,
       });
     });
   }
@@ -83,11 +84,8 @@ export async function fetchCollections({
     );
 
   // Branch filter
-  if (role !== "ADMIN") {
-    // Branch user: only their own branch_code — fast eq
-    query = query.eq("branch_code", branch);
-  } else if (branch) {
-    // Admin: get all sub-branches mapped to this controlling branch, then use .in()
+  if (branch) {
+    // Get all sub-branches mapped to this controlling branch, then use .in()
     const subCodes = await getSubBranchCodes(branch);
     if (subCodes.length === 0) {
       // No sub-branches found — filter by the branch itself
@@ -96,7 +94,6 @@ export async function fetchCollections({
       query = query.in("branch_code", subCodes);
     }
   }
-  // If admin with no branch selected — no filter, show all
 
   // Status filter
   if (status !== "ALL") {

@@ -37,7 +37,7 @@ export function useCollections() {
   const [selectedMonth, setSelectedMonth] = useSessionStorageState<string>("coll_month", "");
   const [selectedBranch, setSelectedBranch] = useSessionStorageState<string>("coll_branch", "");
   
-  const effectiveBranch = isAdmin ? selectedBranch || null : branch;
+  const effectiveBranch = isAdmin ? selectedBranch || null : selectedBranch || branch;
   const [branchOptions, setBranchOptions] = useState<string[]>([]);
   const [monthOptions, setMonthOptions] = useState<{ value: string; label: string }[]>([]);
   const deferredSearch = useDeferredValue(search);
@@ -68,17 +68,25 @@ export function useCollections() {
   }, []);
 
   useEffect(() => {
-    if (role !== "ADMIN") return;
     const fetchBranches = async () => {
       try {
-        const branches = await fetchAccessibleCollectionBranchCodes();
-        setBranchOptions(branches);
+        if (role === "ADMIN") {
+          const branches = await fetchAccessibleCollectionBranchCodes();
+          setBranchOptions(branches);
+        } else if (branch) {
+          const { getSubBranchCodes } = await import("@/services/collections.api");
+          const subBranches = await getSubBranchCodes(branch);
+          // Only show dropdown if there are sub-branches mapped to it
+          if (subBranches.length > 1) {
+            setBranchOptions(subBranches);
+          }
+        }
       } catch (error) {
         console.error("Failed to fetch branches", error);
       }
     };
     fetchBranches();
-  }, [role]);
+  }, [role, branch]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -89,7 +97,7 @@ export function useCollections() {
     try {
       const [result, kpiResult, agingResult] = await Promise.all([
         fetchCollections({
-          branch: role === "ADMIN" ? selectedBranch : branch!!,
+          branch: effectiveBranch as string,
           role: role as "ADMIN" | "BRANCH",
           page: currentPage,
           pageSize,
@@ -237,6 +245,7 @@ export function useCollections() {
     handleChange,
     handleSave,
     branch,
+    effectiveBranch,
     role,
     isAdmin,
     canEdit,
