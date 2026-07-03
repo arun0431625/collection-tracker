@@ -37,6 +37,12 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       return null;
     }
 
+    if (session.user?.user_metadata?.viewer_user) {
+      setProfile(null);
+      setLoading(false);
+      return null;
+    }
+
     try {
       const nextProfile = await getCurrentBranchProfile();
 
