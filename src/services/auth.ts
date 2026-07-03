@@ -27,6 +27,10 @@ export function branchCodeToEmail(branchCode: string) {
   return `${branchCode.trim().toLowerCase()}@tracker.com`;
 }
 
+export function viewerUsernameToEmail(username: string) {
+  return `${username.trim().toLowerCase()}@viewer.tracker.com`;
+}
+
 export async function getCurrentBranchProfile() {
   const { data, error } = await supabase.rpc("get_current_branch_profile");
 
@@ -74,6 +78,55 @@ export async function signInWithBranchPassword(
   }
 
   return profile;
+}
+
+// Sign in as a viewer user (username@viewer.tracker.com)
+export async function signInAsViewer(username: string, password: string) {
+  const email = viewerUsernameToEmail(username);
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return email;
+}
+
+// Try branch login first, then viewer login
+export async function signInAuto(
+  username: string,
+  password: string
+): Promise<{ type: "branch"; profile: BranchProfile } | { type: "viewer" }> {
+  // Try branch login first
+  const branchEmail = branchCodeToEmail(username.trim().toUpperCase());
+  const { error: branchError } = await supabase.auth.signInWithPassword({
+    email: branchEmail,
+    password,
+  });
+
+  if (!branchError) {
+    // Branch login succeeded
+    const profile = await getCurrentBranchProfile();
+    if (!profile) {
+      await supabase.auth.signOut();
+      throw new Error("Branch profile not found.");
+    }
+    if (!profile.is_active) {
+      await supabase.auth.signOut();
+      throw new Error("This branch account is disabled.");
+    }
+    return { type: "branch", profile };
+  }
+
+  // Branch login failed — try viewer login
+  const viewerEmail = viewerUsernameToEmail(username);
+  const { error: viewerError } = await supabase.auth.signInWithPassword({
+    email: viewerEmail,
+    password,
+  });
+
+  if (!viewerError) {
+    return { type: "viewer" };
+  }
+
+  // Both failed
+  throw new Error("Invalid username or password");
 }
 
 export async function signOutCurrentUser() {

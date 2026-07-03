@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { signInWithBranchPassword } from "@/services/auth";
+import { signInAuto } from "@/services/auth";
 import { useBranch } from "@/context/BranchContext";
 
 export default function Login() {
@@ -23,9 +23,12 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const profile = await signInWithBranchPassword(username, password);
+      const result = await signInAuto(username, password);
 
-      if (profile.must_change_password) {
+      if (result.type === "viewer") {
+        // Viewer login — redirect to dashboard (viewer context will handle profile)
+        navigate("/dashboard", { replace: true });
+      } else if (result.profile.must_change_password) {
         navigate("/change-password", { replace: true });
       } else {
         navigate("/dashboard", { replace: true });

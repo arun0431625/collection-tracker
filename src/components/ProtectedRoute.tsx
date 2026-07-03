@@ -1,13 +1,17 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useBranch } from "../context/BranchContext";
+import { useViewer } from "../context/ViewerContext";
 
 type ProtectedRouteProps = {
   requireRole?: "ADMIN" | "BRANCH";
 };
 
 export default function ProtectedRoute({ requireRole }: ProtectedRouteProps) {
-  const { branch, loading, must_change_password, role } = useBranch();
+  const { branch, loading: branchLoading, must_change_password, role } = useBranch();
+  const { viewer, loading: viewerLoading } = useViewer();
   const location = useLocation();
+
+  const loading = branchLoading || viewerLoading;
 
   if (loading) {
     return (
@@ -15,6 +19,15 @@ export default function ProtectedRoute({ requireRole }: ProtectedRouteProps) {
         Loading...
       </div>
     );
+  }
+
+  // Allow viewer users through (they have no branch profile)
+  if (!branch && viewer) {
+    // Viewers cannot access admin-only routes
+    if (requireRole === "ADMIN") {
+      return <Navigate to="/dashboard" replace />;
+    }
+    return <Outlet />;
   }
 
   if (!branch) {

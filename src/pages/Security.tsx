@@ -14,6 +14,8 @@ import {
   getAppSetting,
   setAppSetting,
 } from "@/services/admin";
+import { listViewerUsers, deleteViewerUser, type ViewerUser } from "@/services/viewerUsers";
+import CreateViewerModal from "@/components/security/CreateViewerModal";
 
 type UserRow = Awaited<ReturnType<typeof fetchSecurityRows>>[number];
 
@@ -49,6 +51,15 @@ export default function Security() {
   const [transferEnabled, setTransferEnabled] = useState(true);
   const [resettingAll, setResettingAll] = useState(false);
 
+  // Viewer users
+  const [viewerUsers, setViewerUsers] = useState<ViewerUser[]>([]);
+  const [showCreateViewer, setShowCreateViewer] = useState(false);
+  const [deletingViewer, setDeletingViewer] = useState<string | null>(null);
+
+  // Pagination
+  const PAGE_SIZE = 15;
+  const [currentPage, setCurrentPage] = useState(1);
+
   const totalBranches = rows.length;
   const activeCount = rows.filter((r) => r.is_active).length;
   const disabledCount = rows.filter((r) => !r.is_active).length;
@@ -56,7 +67,28 @@ export default function Security() {
   useEffect(() => {
     if (role !== "ADMIN") return;
     void fetchBranches();
+    void loadViewerUsers();
   }, [role]);
+
+  async function loadViewerUsers() {
+    try {
+      const data = await listViewerUsers();
+      setViewerUsers(data);
+    } catch {}
+  }
+
+  async function handleDeleteViewer(userId: string, username: string) {
+    if (!window.confirm(`Delete viewer user "${username}"? This cannot be undone.`)) return;
+    setDeletingViewer(userId);
+    try {
+      await deleteViewerUser(userId);
+      setViewerUsers((prev) => prev.filter((v) => v.id !== userId));
+    } catch (err: any) {
+      alert(err?.message || "Failed to delete viewer user");
+    } finally {
+      setDeletingViewer(null);
+    }
+  }
 
   async function fetchBranches() {
     setLoading(true);
@@ -282,6 +314,9 @@ export default function Security() {
     (row) => !row.mapped_to || row.mapped_to === row.branch_code
   );
 
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const pagedRows = filteredRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   const modalBranches = rows.filter((row) => {
     const query = modalSearch.toLowerCase().trim();
     if (!query) return true;
@@ -290,6 +325,15 @@ export default function Security() {
       (row.area_manager || "").toLowerCase().includes(query)
     );
   });
+
+  // Derive unique controlling branches for viewer user creation
+  const viewerBranchList = Array.from(
+    new Set(
+      rows
+        .filter((r) => r.branch_code !== "ADMIN")
+        .map((r) => (r.mapped_to || r.branch_code).trim().toUpperCase())
+    )
+  ).sort();
 
   if (role !== "ADMIN") {
     return <div className="p-6 text-red-600">Access denied</div>;
@@ -316,6 +360,18 @@ export default function Security() {
             Logged in as: <b>HO (Admin)</b>
           </div>
           <div className="flex gap-2">
+            <button
+              onClick={() => setShowCreateViewer(true)}
+              className="rounded bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700 shadow-sm transition flex items-center gap-1.5"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <line x1="19" y1="8" x2="19" y2="14"/>
+                <line x1="22" y1="11" x2="16" y2="11"/>
+              </svg>
+              Create User ID
+            </button>
             <button
               onClick={handleResetAll}
               disabled={resettingAll}
@@ -350,7 +406,10 @@ export default function Security() {
           placeholder="Search branch or manager..."
           className="rounded border px-3 py-1.5 text-sm w-72"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setCurrentPage(1);
+          }}
         />
 
         <div className="flex items-center gap-2">
@@ -482,67 +541,67 @@ export default function Security() {
         </div>
       )}
 
-      <div className="bg-white/80 backdrop-blur rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <table className="min-w-full border-collapse text-sm">
-          <thead className="bg-slate-50">
+          <thead className="bg-slate-50 border-b border-slate-100">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 tracking-wide uppercase">
+              <th className="px-6 py-3.5 text-left text-xs font-semibold text-slate-600 tracking-wide uppercase">
                 Branch
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 tracking-wide uppercase">
+              <th className="px-6 py-3.5 text-left text-xs font-semibold text-slate-600 tracking-wide uppercase">
                 Area Manager
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 tracking-wide uppercase">
+              <th className="px-6 py-3.5 text-left text-xs font-semibold text-slate-600 tracking-wide uppercase">
                 Username
               </th>
-              <th className="border px-2 py-1 text-center">Status</th>
-              <th className="border px-2 py-1 text-center">Password State</th>
-              <th className="border px-2 py-1 text-center">Action</th>
+              <th className="px-6 py-3.5 text-center text-xs font-semibold text-slate-600 tracking-wide uppercase">Status</th>
+              <th className="px-6 py-3.5 text-center text-xs font-semibold text-slate-600 tracking-wide uppercase">Password State</th>
+              <th className="px-6 py-3.5 text-right text-xs font-semibold text-slate-600 tracking-wide uppercase">Action</th>
             </tr>
           </thead>
 
-          <tbody>
-            {controllingBranches.map((row) => (
+          <tbody className="divide-y divide-slate-100">
+            {pagedRows.map((row) => (
               <tr
                 key={row.id}
                 className="border-t border-slate-100 hover:bg-slate-50 transition-all duration-200"
               >
-                <td className="px-4 py-3">{row.branch_code}</td>
-                <td className="px-4 py-3">{row.area_manager || "-"}</td>
-                <td className="px-4 py-3">
+                <td className="px-6 py-4">{row.branch_code}</td>
+                <td className="px-6 py-4 text-slate-500">{row.area_manager || "-"}</td>
+                <td className="px-6 py-4">
                   {editingRow === row.branch_code ? (
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
                         value={editUsernameVal}
                         onChange={(e) => setEditUsernameVal(e.target.value)}
-                        className="w-28 border border-blue-400 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-blue-500 uppercase"
+                        className="w-28 border border-blue-400 rounded-lg px-2.5 py-1 text-xs outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent uppercase"
                         disabled={savingUsername}
                       />
                       <button
                         onClick={() => void handleSaveUsername(row.branch_code)}
                         disabled={savingUsername}
-                        className="text-xs font-medium text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-2 py-1 rounded transition"
+                        className="text-xs font-medium text-white hover:bg-emerald-700 bg-emerald-600 px-2.5 py-1 rounded-lg transition shadow-sm"
                       >
                         {savingUsername ? "Saving.." : "Save"}
                       </button>
                       <button
                         onClick={() => setEditingRow(null)}
                         disabled={savingUsername}
-                        className="text-xs font-medium text-slate-500 hover:bg-slate-100 px-2 py-1 rounded transition"
+                        className="text-xs font-medium text-slate-600 hover:bg-slate-200 bg-slate-100 px-2.5 py-1 rounded-lg transition"
                       >
                         Cancel
                       </button>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold">{row.username || row.branch_code}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-700">{row.username || row.branch_code}</span>
                       <button
                         onClick={() => {
                           setEditingRow(row.branch_code);
                           setEditUsernameVal(row.username || row.branch_code);
                         }}
-                        className="opacity-60 hover:opacity-100 transition whitespace-nowrap text-xs text-blue-600 underline"
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium hover:underline transition"
                       >
                         Edit Alias
                       </button>
@@ -550,16 +609,16 @@ export default function Security() {
                   )}
                 </td>
 
-                <td className="px-4 py-3 text-center">
+                <td className="px-6 py-4 text-center">
                   <span
-                    className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${
+                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                       row.is_active
-                        ? "bg-emerald-50 text-emerald-700"
-                        : "bg-rose-50 text-rose-700"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-rose-100 text-rose-700"
                     }`}
                   >
                     <span
-                      className={`h-2 w-2 rounded-full ${
+                      className={`h-1.5 w-1.5 rounded-full ${
                         row.is_active ? "bg-emerald-500" : "bg-rose-500"
                       }`}
                     />
@@ -567,23 +626,23 @@ export default function Security() {
                   </span>
                 </td>
 
-                <td className="px-4 py-3 text-center text-xs text-gray-600">
+                <td className="px-6 py-4 text-center text-xs text-slate-500">
                   {getPasswordStatus(row)}
                 </td>
 
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
+                <td className="px-6 py-4 text-right">
+                  <div className="flex items-center justify-end gap-2">
                     {row.is_active ? (
                       <button
                         onClick={() => void handleToggleActive(row.branch_code, false)}
-                        className="rounded-lg border border-rose-300 px-3 py-1 text-xs text-rose-600 hover:bg-rose-50 transition"
+                        className="rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition"
                       >
                         Disable
                       </button>
                     ) : (
                       <button
                         onClick={() => void handleToggleActive(row.branch_code, true)}
-                        className="rounded-lg border border-emerald-300 px-3 py-1 text-xs text-emerald-600 hover:bg-emerald-50 transition"
+                        className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-50 hover:border-emerald-300 transition"
                       >
                         Enable
                       </button>
@@ -592,7 +651,7 @@ export default function Security() {
                     {row.branch_code !== "ADMIN" && (
                       <button
                         onClick={() => void handleReset(row.branch_code)}
-                        className="rounded-lg bg-slate-800 px-3 py-1 text-xs text-white hover:bg-slate-900 transition shadow-sm"
+                        className="rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-900 transition shadow-sm"
                       >
                         Reset
                       </button>
@@ -604,10 +663,138 @@ export default function Security() {
           </tbody>
         </table>
 
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+            <span className="text-xs text-slate-500">
+              Showing <span className="font-semibold text-slate-700">{(currentPage - 1) * PAGE_SIZE + 1}</span> to{" "}
+              <span className="font-semibold text-slate-700">{Math.min(currentPage * PAGE_SIZE, controllingBranches.length)}</span> of{" "}
+              <span className="font-semibold text-slate-700">{controllingBranches.length}</span> branches
+            </span>
+            <div className="flex gap-1">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 text-xs font-medium border border-slate-200 rounded-lg bg-white hover:bg-slate-50 text-slate-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setCurrentPage(p)}
+                  className={`px-3 py-1 text-xs rounded-lg font-semibold transition ${
+                    currentPage === p
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "border border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 text-xs font-medium border border-slate-200 rounded-lg bg-white hover:bg-slate-50 text-slate-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+
         {controllingBranches.length === 0 && (
           <div className="p-4 text-center text-sm text-gray-500">
             No controlling branches found
           </div>
+        )}
+      </div>
+
+      {/* Viewer Users Section */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-50 to-blue-50">
+          <div>
+            <h2 className="text-base font-semibold text-slate-800">Viewer Users</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Read-only users with custom page & branch access</p>
+          </div>
+          <button
+            onClick={() => setShowCreateViewer(true)}
+            className="rounded-lg bg-blue-600 px-4 py-1.5 text-xs text-white hover:bg-blue-700 shadow-sm transition flex items-center gap-1.5"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <line x1="19" y1="8" x2="19" y2="14"/>
+              <line x1="22" y1="11" x2="16" y2="11"/>
+            </svg>
+            + Create User ID
+          </button>
+        </div>
+
+        {viewerUsers.length === 0 ? (
+          <div className="px-6 py-10 text-center text-sm text-slate-400">
+            No viewer users created yet. Click <strong>Create User ID</strong> to add one.
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Username</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Display Name</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Pages</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Branches</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {viewerUsers.map((v) => (
+                <tr key={v.id} className="hover:bg-slate-50 transition">
+                  <td className="px-4 py-3">
+                    <div className="font-mono text-xs font-semibold text-slate-700">{v.username}</div>
+                    <div className="text-[10px] text-slate-400">{v.username}@viewer.tracker.com</div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-600">{v.display_name || "-"}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {(v.accessible_pages || []).map((p) => (
+                        <span key={p} className="inline-block bg-blue-100 text-blue-700 text-[10px] font-medium px-1.5 py-0.5 rounded">{p}</span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {(v.accessible_branches || []).slice(0, 3).map((b) => (
+                        <span key={b} className="inline-block bg-slate-100 text-slate-600 text-[10px] font-medium px-1.5 py-0.5 rounded">{b}</span>
+                      ))}
+                      {(v.accessible_branches || []).length > 3 && (
+                        <span className="inline-block bg-slate-200 text-slate-500 text-[10px] font-medium px-1.5 py-0.5 rounded">
+                          +{v.accessible_branches.length - 3} more
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                      v.is_active ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${v.is_active ? "bg-emerald-500" : "bg-red-400"}`} />
+                      {v.is_active ? "Active" : "Disabled"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => void handleDeleteViewer(v.id, v.username)}
+                      disabled={deletingViewer === v.id}
+                      className="text-xs text-red-600 hover:text-red-700 font-medium disabled:opacity-50"
+                    >
+                      {deletingViewer === v.id ? "Deleting..." : "Delete"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
 
@@ -712,6 +899,18 @@ export default function Security() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Create Viewer User Modal */}
+      {showCreateViewer && (
+        <CreateViewerModal
+          controllingBranches={viewerBranchList}
+          onClose={() => setShowCreateViewer(false)}
+          onCreated={() => {
+            setShowCreateViewer(false);
+            void loadViewerUsers();
+          }}
+        />
       )}
     </div>
   );
