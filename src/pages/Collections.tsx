@@ -104,10 +104,11 @@ export default function Collections() {
   async function exportExcel() {
     const toastId = toast.loading("Fetching all data for export...");
     try {
-      // Paginate through ALL pages — use larger chunks for speed
+      // Paginate through ALL pages — Supabase max is 1000 rows per request
       let allRows: any[] = [];
       let page = 1;
-      const chunkSize = 5000;
+      const chunkSize = 1000;
+      let totalCount = 0;
       while (true) {
         const result = await fetchCollections({
           branch: effectiveBranch as string,
@@ -118,9 +119,10 @@ export default function Collections() {
           search: search,
           month: selectedMonth,
         });
+        totalCount = result.totalCount;
         allRows = allRows.concat(result.rows);
-        toast.loading(`Fetched ${allRows.length} of ${result.totalCount} rows...`, { id: toastId });
-        if (allRows.length >= result.totalCount || result.rows.length < chunkSize) break;
+        toast.loading(`Fetched ${allRows.length} of ${totalCount} rows...`, { id: toastId });
+        if (allRows.length >= totalCount || result.rows.length === 0) break;
         page++;
       }
 
