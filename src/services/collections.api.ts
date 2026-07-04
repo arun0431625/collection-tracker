@@ -42,6 +42,26 @@ export async function fetchBranchLookup(branchCodes: string[]) {
   return lookup;
 }
 
+export async function fetchAllBranchesLookup() {
+  const { data, error } = await supabase
+    .from("branches")
+    .select("branch_code, branch_name, area_manager, mapped_to");
+
+  if (error) throw error;
+
+  const lookup = new Map<string, { branch_name: string; area_manager: string; mapped_to: string }>();
+  (data || []).forEach((row) => {
+    const code = (row.branch_code || "").trim().toUpperCase();
+    lookup.set(code, {
+      branch_name: row.branch_name || row.branch_code,
+      area_manager: row.area_manager || "",
+      mapped_to: row.mapped_to || row.branch_code,
+    });
+  });
+
+  return lookup;
+}
+
 // Cache sub-branch code lookups to avoid repeated DB calls
 const subBranchCache = new Map<string, string[]>();
 

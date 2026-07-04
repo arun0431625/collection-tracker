@@ -5,7 +5,7 @@ import { useCollections } from "@/hooks/useCollections";
 import { CollectionRow } from "@/components/collections/CollectionRow";
 import { STATUS, StatusFilter } from "@/types/constants";
 import { GRRow } from "@/types/collections";
-import { fetchBranchLookup, fetchCollections } from "@/services/collections.api";
+import { fetchAllBranchesLookup, fetchCollections } from "@/services/collections.api";
 import {
   createBranchTransferRequest,
   fetchTransferBranches,
@@ -125,24 +125,29 @@ export default function Collections() {
       }
 
       const wb = XLSX.utils.book_new();
-      const branchLookup = await fetchBranchLookup(allRows.map((r: any) => r.branch_code));
-      const sortedRows = [...allRows].sort((a: any, b: any) => {
+      const branchLookup = await fetchAllBranchesLookup();
+
+      // Sort allRows in place to save memory
+      allRows.sort((a: any, b: any) => {
         const branchCompare = String(a.branch_code || "").localeCompare(String(b.branch_code || ""));
         if (branchCompare !== 0) return branchCompare;
         return String(b.gr_date || "").localeCompare(String(a.gr_date || ""));
       });
 
-      const data = sortedRows.map((r: any) => {
+      // Transform in-place to avoid array duplication and high memory overhead
+      for (let i = 0; i < allRows.length; i++) {
+        const r = allRows[i];
         const freight = r.total_freight || 0;
         const received = r.received_amount || 0;
         const capped = Math.min(received, freight);
-        const branchInfo = branchLookup.get(r.branch_code) || {
+        const branchCodeUpper = (r.branch_code || "").trim().toUpperCase();
+        const branchInfo = branchLookup.get(branchCodeUpper) || {
           branch_name: r.branch_code || "",
           area_manager: r.area_manager || "",
           mapped_to: r.branch_code || "",
         };
 
-        return {
+        allRows[i] = {
           Controlling_Branch: branchInfo.mapped_to,
           Branch_Code: r.branch_code || "",
           Branch_Name: branchInfo.branch_name,
@@ -158,26 +163,27 @@ export default function Collections() {
           Ref_No: r.ref_no || "",
           Remarks: r.remarks || "",
         };
-      });
+      }
 
-      const ws = XLSX.utils.json_to_sheet(data);
+      const ws = XLSX.utils.json_to_sheet(allRows);
       XLSX.utils.book_append_sheet(wb, ws, "Collections");
 
       if (isAdmin && !selectedBranch) {
         const summary = Array.from(
-          sortedRows.reduce((map: Map<string, { branchName: string; areaManager: string; grs: number; freight: number; received: number; balance: number }>, r: any) => {
-            const code = r.branch_code || "";
-            const freight = r.total_freight || 0;
-            const received = Math.min(r.received_amount || 0, freight);
-            const branchInfo = branchLookup.get(code) || {
+          allRows.reduce((map: Map<string, { branchName: string; areaManager: string; grs: number; freight: number; received: number; balance: number }>, r: any) => {
+            const code = r.Branch_Code || "";
+            const freight = r.Freight || 0;
+            const received = r.Received || 0;
+            const branchCodeUpper = code.trim().toUpperCase();
+            const branchInfo = branchLookup.get(branchCodeUpper) || {
               branch_name: code,
-              area_manager: r.area_manager || "",
+              area_manager: r.Area_Manager || "",
               mapped_to: code,
             };
             const item = map.get(code) || {
               controllingBranch: branchInfo.mapped_to,
               branchName: branchInfo.branch_name,
-              areaManager: branchInfo.area_manager || r.area_manager || "",
+              areaManager: branchInfo.area_manager || r.Area_Manager || "",
               grs: 0,
               freight: 0,
               received: 0,
