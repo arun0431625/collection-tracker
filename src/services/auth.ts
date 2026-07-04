@@ -126,7 +126,7 @@ export async function signInAuto(
   }
 
   // Both failed
-  throw new Error("Invalid username or password");
+  throw new Error(`Branch: ${branchError?.message || "failed"}. Viewer: ${viewerError?.message || "failed"}`);
 }
 
 export async function signOutCurrentUser() {

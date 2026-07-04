@@ -314,8 +314,8 @@ export default function Security() {
     (row) => !row.mapped_to || row.mapped_to === row.branch_code
   );
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
-  const pagedRows = filteredRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(controllingBranches.length / PAGE_SIZE));
+  const pagedRows = controllingBranches.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const modalBranches = rows.filter((row) => {
     const query = modalSearch.toLowerCase().trim();
