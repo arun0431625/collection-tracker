@@ -104,10 +104,10 @@ export default function Collections() {
   async function exportExcel() {
     const toastId = toast.loading("Fetching all data for export...");
     try {
-      // Paginate through ALL pages to get every row
+      // Paginate through ALL pages — use larger chunks for speed
       let allRows: any[] = [];
       let page = 1;
-      const chunkSize = 1000;
+      const chunkSize = 5000;
       while (true) {
         const result = await fetchCollections({
           branch: effectiveBranch as string,
@@ -124,17 +124,19 @@ export default function Collections() {
         page++;
       }
 
-      const wb = XLSX.utils.book_new();
+      toast.loading(`Processing ${allRows.length} rows for export...`, { id: toastId });
       const branchLookup = await fetchAllBranchesLookup();
 
-      // Sort allRows in place to save memory
+      // Sort in place
       allRows.sort((a: any, b: any) => {
         const branchCompare = String(a.branch_code || "").localeCompare(String(b.branch_code || ""));
         if (branchCompare !== 0) return branchCompare;
         return String(b.gr_date || "").localeCompare(String(a.gr_date || ""));
       });
 
-      // Transform in-place to avoid array duplication and high memory overhead
+      // Build summary WHILE transforming (single pass)
+      const summaryMap = new Map<string, { controllingBranch: string; branchName: string; areaManager: string; grs: number; freight: number; received: number; balance: number }>();
+
       for (let i = 0; i < allRows.length; i++) {
         const r = allRows[i];
         const freight = r.total_freight || 0;
@@ -146,6 +148,23 @@ export default function Collections() {
           area_manager: r.area_manager || "",
           mapped_to: r.branch_code || "",
         };
+        const bal = freight - capped;
+
+        // Accumulate summary
+        if (isAdmin && !selectedBranch) {
+          const code = r.branch_code || "";
+          const item = summaryMap.get(code) || {
+            controllingBranch: branchInfo.mapped_to,
+            branchName: branchInfo.branch_name,
+            areaManager: branchInfo.area_manager || r.area_manager || "",
+            grs: 0, freight: 0, received: 0, balance: 0,
+          };
+          item.grs += 1;
+          item.freight += freight;
+          item.received += capped;
+          item.balance += bal;
+          summaryMap.set(code, item);
+        }
 
         allRows[i] = {
           Controlling_Branch: branchInfo.mapped_to,
@@ -157,7 +176,7 @@ export default function Collections() {
           Party: r.party_name,
           Freight: freight,
           Received: capped,
-          Balance: freight - capped,
+          Balance: bal,
           Status: getStatus(r as GRRow),
           Payment_Mode: r.payment_mode || "",
           Ref_No: r.ref_no || "",
@@ -165,59 +184,97 @@ export default function Collections() {
         };
       }
 
-      const ws = XLSX.utils.json_to_sheet(allRows);
-      XLSX.utils.book_append_sheet(wb, ws, "Collections");
-
-      if (isAdmin && !selectedBranch) {
-        const summary = Array.from(
-          allRows.reduce((map: Map<string, { branchName: string; areaManager: string; grs: number; freight: number; received: number; balance: number }>, r: any) => {
-            const code = r.Branch_Code || "";
-            const freight = r.Freight || 0;
-            const received = r.Received || 0;
-            const branchCodeUpper = code.trim().toUpperCase();
-            const branchInfo = branchLookup.get(branchCodeUpper) || {
-              branch_name: code,
-              area_manager: r.Area_Manager || "",
-              mapped_to: code,
-            };
-            const item = map.get(code) || {
-              controllingBranch: branchInfo.mapped_to,
-              branchName: branchInfo.branch_name,
-              areaManager: branchInfo.area_manager || r.Area_Manager || "",
-              grs: 0,
-              freight: 0,
-              received: 0,
-              balance: 0,
-            };
-            item.grs += 1;
-            item.freight += freight;
-            item.received += received;
-            item.balance += freight - received;
-            map.set(code, item);
-            return map;
-          }, new Map())
-        )
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([key, val]) => ({
-            Controlling_Branch: val.controllingBranch,
-            Branch_Code: key,
-            Branch_Name: val.branchName,
-            Area_Manager: val.areaManager,
-            GRs: val.grs,
-            Freight: val.freight,
-            Received: val.received,
-            Balance: val.balance,
-          }));
-
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "Branch Summary");
-      }
-
-      const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
       const exportBranch = selectedBranch || "All_Branches";
-      saveAs(new Blob([buf]), `Collections_${exportBranch}.xlsx`);
-      toast.success(`Export successful! ${allRows.length} rows exported.`, { id: toastId });
-    } catch (e) {
-      toast.error("Export failed.", { id: toastId });
+      const LARGE_THRESHOLD = 50000;
+
+      if (allRows.length >= LARGE_THRESHOLD) {
+        // ---- CSV export for large datasets (browser can't handle XLSX for 2L+ rows) ----
+        toast.loading(`Generating CSV for ${allRows.length} rows...`, { id: toastId });
+
+        const headers = ["Controlling_Branch","Branch_Code","Branch_Name","Area_Manager","GR_No","Date","Party","Freight","Received","Balance","Status","Payment_Mode","Ref_No","Remarks"];
+
+        // Build CSV in chunks to avoid single giant string allocation
+        const csvChunks: string[] = [];
+        csvChunks.push(headers.join(",") + "\n");
+
+        const escapeCSV = (val: any) => {
+          const s = String(val ?? "");
+          if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+            return '"' + s.replace(/"/g, '""') + '"';
+          }
+          return s;
+        };
+
+        const BATCH = 10000;
+        for (let i = 0; i < allRows.length; i += BATCH) {
+          const lines: string[] = [];
+          const end = Math.min(i + BATCH, allRows.length);
+          for (let j = i; j < end; j++) {
+            const r = allRows[j];
+            lines.push(headers.map((h) => escapeCSV(r[h])).join(","));
+          }
+          csvChunks.push(lines.join("\n") + "\n");
+        }
+
+        // Free allRows memory before creating blob
+        allRows.length = 0;
+
+        const csvBlob = new Blob(csvChunks, { type: "text/csv;charset=utf-8;" });
+        saveAs(csvBlob, `Collections_${exportBranch}.csv`);
+
+        // Generate summary as small XLSX separately
+        if (isAdmin && !selectedBranch && summaryMap.size > 0) {
+          const summaryData = Array.from(summaryMap)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([key, val]) => ({
+              Controlling_Branch: val.controllingBranch,
+              Branch_Code: key,
+              Branch_Name: val.branchName,
+              Area_Manager: val.areaManager,
+              GRs: val.grs,
+              Freight: val.freight,
+              Received: val.received,
+              Balance: val.balance,
+            }));
+
+          const swb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(swb, XLSX.utils.json_to_sheet(summaryData), "Branch Summary");
+          const sBuf = XLSX.write(swb, { bookType: "xlsx", type: "array", bookSST: false });
+          saveAs(new Blob([sBuf]), `Collections_Summary_${exportBranch}.xlsx`);
+        }
+
+        toast.success(`Export done! ${csvChunks.reduce((s, c) => s + c.length, 0) > 0 ? "CSV" : ""} data + Summary downloaded.`, { id: toastId });
+
+      } else {
+        // ---- Standard XLSX for smaller datasets ----
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet(allRows);
+        XLSX.utils.book_append_sheet(wb, ws, "Collections");
+
+        if (isAdmin && !selectedBranch && summaryMap.size > 0) {
+          const summaryData = Array.from(summaryMap)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([key, val]) => ({
+              Controlling_Branch: val.controllingBranch,
+              Branch_Code: key,
+              Branch_Name: val.branchName,
+              Area_Manager: val.areaManager,
+              GRs: val.grs,
+              Freight: val.freight,
+              Received: val.received,
+              Balance: val.balance,
+            }));
+
+          XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), "Branch Summary");
+        }
+
+        const buf = XLSX.write(wb, { bookType: "xlsx", type: "array", bookSST: false });
+        saveAs(new Blob([buf]), `Collections_${exportBranch}.xlsx`);
+        toast.success(`Export successful! ${allRows.length} rows exported.`, { id: toastId });
+      }
+    } catch (e: any) {
+      console.error("Export error:", e);
+      toast.error(`Export failed: ${e?.message || "Unknown error"}`, { id: toastId });
     }
   }
 
