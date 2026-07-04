@@ -63,7 +63,7 @@ export default function Collections() {
   }, []);
 
   function formatINR(amount: number) {
-    return amount.toLocaleString("en-IN");
+    return Math.round(amount).toLocaleString("en-IN");
   }
 
   function getStatus(r: GRRow): StatusFilter {
