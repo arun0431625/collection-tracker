@@ -14,6 +14,15 @@ import {
 // ─── Session Storage Persistence ───────────────────────────────────────
 const STORAGE_KEY = "admin_upload_state";
 
+export type DuplicateRecord = {
+  gr_no: string;
+  branch_code: string;
+  old_party: string;
+  new_party: string;
+  old_amount: number;
+  new_amount: number;
+};
+
 type PersistedState = {
   stage: "IDLE" | "VALIDATED" | "DUPLICATES_CHECKED" | "DONE";
   totalRows: number;
@@ -21,6 +30,7 @@ type PersistedState = {
   invalidCount: number;
   newCount: number;
   duplicateCount: number;
+  duplicatesList: DuplicateRecord[];
   newInsertAmount: number;
   overwriteOldAmount: number;
   overwriteNewAmount: number;
@@ -215,6 +225,8 @@ export default function AdminUpload() {
   const [invalidCount, setInvalidCount] = useState(saved?.invalidCount || 0);
   const [newCount, setNewCount] = useState(saved?.newCount || 0);
   const [duplicateCount, setDuplicateCount] = useState(saved?.duplicateCount || 0);
+  const [duplicatesList, setDuplicatesList] = useState<DuplicateRecord[]>(saved?.duplicatesList || []);
+  const [duplicatePage, setDuplicatePage] = useState(1);
 
   const [collectionUpdatedCount, setCollectionUpdatedCount] = useState(saved?.collectionUpdatedCount || 0);
   const [collectionImpactAmount, setCollectionImpactAmount] = useState(saved?.collectionImpactAmount || 0);
@@ -227,12 +239,12 @@ export default function AdminUpload() {
   // Persist state to sessionStorage whenever key values change
   const persistState = useCallback(() => {
     saveState({
-      stage, totalRows, validCount, invalidCount, newCount, duplicateCount,
+      stage, totalRows, validCount, invalidCount, newCount, duplicateCount, duplicatesList,
       newInsertAmount, overwriteOldAmount, overwriteNewAmount, overwriteNetImpact,
       collectionUpdatedCount, collectionImpactAmount,
       rawRowsCache, validRowsCache, fileName,
     });
-  }, [stage, totalRows, validCount, invalidCount, newCount, duplicateCount,
+  }, [stage, totalRows, validCount, invalidCount, newCount, duplicateCount, duplicatesList,
       newInsertAmount, overwriteOldAmount, overwriteNewAmount, overwriteNetImpact,
       collectionUpdatedCount, collectionImpactAmount, rawRowsCache, validRowsCache, fileName]);
 
@@ -341,6 +353,7 @@ export default function AdminUpload() {
           rawRowsCache: raw,
           validRowsCache: validRows,
           fileName: file.name,
+          duplicatesList: [],
         });
         if (validRows.length) {
           toast.success("File validation complete!");
@@ -369,7 +382,7 @@ export default function AdminUpload() {
     let newCounter = 0, duplicateCounter = 0;
     let newInsertTotal = 0, oldAmountTotal = 0, newAmountTotal = 0;
 
-    const existingMap = new Map<string, number>();
+    const existingMap = new Map<string, { amount: number; party: string }>();
     const rowsForLookup = validRows.map((row) => ({ branch_code: row.branch_code, gr_no: row.gr_no }));
 
     setCheckingTotal(rowsForLookup.length);
@@ -380,7 +393,7 @@ export default function AdminUpload() {
         const chunk = rowsForLookup.slice(i, i + 250);
         const data = await fetchExistingCollectionRows(chunk);
         data.forEach((row) => {
-          existingMap.set(`${row.branch_code}__${row.gr_no}`, Number(row.total_freight || 0));
+          existingMap.set(`${row.branch_code}__${row.gr_no}`, { amount: Number(row.total_freight || 0), party: row.party_name || "UNKNOWN" });
         });
         setCheckingProgress((prev) => prev + chunk.length);
       }
@@ -391,13 +404,22 @@ export default function AdminUpload() {
       return;
     }
 
+    const dups: DuplicateRecord[] = [];
     validRows.forEach((row) => {
       const key = `${row.branch_code}__${row.gr_no}`;
-      const existingAmount = existingMap.get(key);
-      if (existingAmount !== undefined) {
+      const existing = existingMap.get(key);
+      if (existing !== undefined) {
         duplicateCounter += 1;
-        oldAmountTotal += existingAmount;
+        oldAmountTotal += existing.amount;
         newAmountTotal += row.total_freight || 0;
+        dups.push({
+          gr_no: row.gr_no,
+          branch_code: row.branch_code,
+          old_party: existing.party,
+          new_party: row.party_name || "",
+          old_amount: existing.amount,
+          new_amount: row.total_freight || 0,
+        });
       } else {
         newCounter += 1;
         newInsertTotal += row.total_freight || 0;
@@ -406,6 +428,8 @@ export default function AdminUpload() {
 
     setNewCount(newCounter);
     setDuplicateCount(duplicateCounter);
+    setDuplicatesList(dups);
+    setDuplicatePage(1);
     setNewInsertAmount(newInsertTotal);
     setOverwriteOldAmount(oldAmountTotal);
     setOverwriteNewAmount(newAmountTotal);
@@ -753,25 +777,82 @@ export default function AdminUpload() {
           )}
 
           {duplicateCount > 0 && (
-            <div className="bg-white border rounded-2xl shadow-md p-6">
-              <h3 className="text-red-600 font-semibold mb-4">Duplicate GR Financial Summary</h3>
-              <div className="grid grid-cols-3 gap-6">
-                <div className="bg-gray-50 rounded-lg p-4 text-center">
-                  <div className="text-xs text-gray-500 uppercase">Old Amount (Existing)</div>
-                  <div className="text-lg font-semibold mt-1">Rs {overwriteOldAmount.toLocaleString()}</div>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4 text-center">
-                  <div className="text-xs text-gray-500 uppercase">New Amount (File)</div>
-                  <div className="text-lg font-semibold mt-1">Rs {overwriteNewAmount.toLocaleString()}</div>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4 text-center">
-                  <div className="text-xs text-gray-500 uppercase">Net Impact</div>
-                  <div className={`text-lg font-semibold mt-1 ${overwriteNetImpact >= 0 ? "text-green-600" : "text-red-600"}`}>
-                    Rs {overwriteNetImpact.toLocaleString()}
+            <>
+              <div className="bg-white border rounded-2xl shadow-md p-6">
+                <h3 className="text-red-600 font-semibold mb-4">Duplicate GR Financial Summary</h3>
+                <div className="grid grid-cols-3 gap-6">
+                  <div className="bg-gray-50 rounded-lg p-4 text-center">
+                    <div className="text-xs text-gray-500 uppercase">Old Amount (Existing)</div>
+                    <div className="text-lg font-semibold mt-1">Rs {overwriteOldAmount.toLocaleString()}</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4 text-center">
+                    <div className="text-xs text-gray-500 uppercase">New Amount (File)</div>
+                    <div className="text-lg font-semibold mt-1">Rs {overwriteNewAmount.toLocaleString()}</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4 text-center">
+                    <div className="text-xs text-gray-500 uppercase">Net Impact</div>
+                    <div className={`text-lg font-semibold mt-1 ${overwriteNetImpact >= 0 ? "text-green-600" : "text-red-600"}`}>
+                      Rs {overwriteNetImpact.toLocaleString()}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+
+              {duplicatesList.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl shadow-md p-6 mt-6">
+                  <h3 className="text-amber-800 font-semibold mb-4">Duplicate GRs Detail Summary</h3>
+                  <div className="overflow-x-auto rounded-lg border border-amber-200">
+                    <table className="min-w-full text-sm text-left">
+                      <thead className="bg-amber-100 text-amber-900 sticky top-0">
+                        <tr>
+                          <th className="px-4 py-2 font-semibold">GR No</th>
+                          <th className="px-4 py-2 font-semibold">Branch</th>
+                          <th className="px-4 py-2 font-semibold text-gray-500">Old Party</th>
+                          <th className="px-4 py-2 font-semibold text-blue-600">New Party</th>
+                          <th className="px-4 py-2 font-semibold text-gray-500">Old Amount</th>
+                          <th className="px-4 py-2 font-semibold text-blue-600">New Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-amber-100">
+                        {duplicatesList.slice((duplicatePage - 1) * 10, duplicatePage * 10).map((dup, i) => (
+                          <tr key={i} className="hover:bg-amber-50/50 transition">
+                            <td className="px-4 py-2 font-medium">{dup.gr_no}</td>
+                            <td className="px-4 py-2">{dup.branch_code}</td>
+                            <td className="px-4 py-2 text-gray-500">{dup.old_party}</td>
+                            <td className="px-4 py-2 text-blue-600">{dup.new_party}</td>
+                            <td className="px-4 py-2 text-gray-500">₹{dup.old_amount.toLocaleString()}</td>
+                            <td className="px-4 py-2 text-blue-600">₹{dup.new_amount.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {duplicatesList.length > 10 && (
+                    <div className="flex justify-between items-center mt-4">
+                      <span className="text-sm text-amber-700">
+                        Showing {(duplicatePage - 1) * 10 + 1} to {Math.min(duplicatePage * 10, duplicatesList.length)} of {duplicatesList.length} duplicates
+                      </span>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => setDuplicatePage(p => Math.max(1, p - 1))}
+                          disabled={duplicatePage === 1}
+                          className="px-3 py-1 bg-white border border-amber-300 rounded text-amber-800 disabled:opacity-50"
+                        >
+                          Previous
+                        </button>
+                        <button 
+                          onClick={() => setDuplicatePage(p => Math.min(Math.ceil(duplicatesList.length / 10), p + 1))}
+                          disabled={duplicatePage >= Math.ceil(duplicatesList.length / 10)}
+                          className="px-3 py-1 bg-white border border-amber-300 rounded text-amber-800 disabled:opacity-50"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
 
           {/* Collection Field Update Preview */}

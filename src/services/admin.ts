@@ -43,6 +43,7 @@ export type ExistingCollectionRow = {
   branch_code: string;
   gr_no: string;
   total_freight: number;
+  party_name?: string;
 };
 
 function getErrorMessage(error: { message?: string } | null) {
