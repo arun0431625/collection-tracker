@@ -6,12 +6,7 @@ import { CollectionRow } from "@/components/collections/CollectionRow";
 import { STATUS, StatusFilter } from "@/types/constants";
 import { GRRow } from "@/types/collections";
 import { fetchAllBranchesLookup, fetchCollections } from "@/services/collections.api";
-import {
-  createBranchTransferRequest,
-  fetchTransferBranches,
-  type TransferBranchOption,
-} from "@/services/branchTransfers";
-import { getAppSetting } from "@/services/admin";
+
 import { toast } from "sonner";
 
 export default function Collections() {
@@ -46,20 +41,7 @@ export default function Collections() {
     isAdmin,
     canEdit,
   } = useCollections();
-  const [transferBranches, setTransferBranches] = useState<TransferBranchOption[]>([]);
-  const [requestingTransfer, setRequestingTransfer] = useState<string | null>(null);
-  const [transferEnabled, setTransferEnabled] = useState(true);
-
   useEffect(() => {
-    fetchTransferBranches()
-      .then(setTransferBranches)
-      .catch((error) => {
-        console.error("Failed to load transfer branches", error);
-      });
-      
-    getAppSetting("transfer_enabled").then((val) => {
-      if (val !== null) setTransferEnabled(val);
-    });
   }, []);
 
   function formatINR(amount: number) {
@@ -280,22 +262,7 @@ export default function Collections() {
     }
   }
 
-  async function handleRequestTransfer(r: GRRow, toBranchCode: string) {
-    const transferKey = `${r.branch_code}__${r.gr_no}`;
-    try {
-      setRequestingTransfer(transferKey);
-      await createBranchTransferRequest({
-        grNo: r.gr_no,
-        fromBranchCode: r.branch_code,
-        toBranchCode,
-      });
-      toast.success("Branch transfer request sent for admin approval.");
-    } catch (error: any) {
-      toast.error(error?.message || "Failed to create transfer request.");
-    } finally {
-      setRequestingTransfer(null);
-    }
-  }
+
 
   return (
     <div className="p-4 space-y-6">
@@ -458,7 +425,7 @@ export default function Collections() {
               <th className="px-1 py-1.5 font-semibold tracking-wide text-center align-middle w-[8%] bg-slate-800 text-slate-200 border-r border-slate-700">Received</th>
               <th className="px-1 py-1.5 font-semibold tracking-wide text-center align-middle w-[10%] bg-slate-800 text-slate-200 border-r border-slate-700">Payment Date</th>
               <th className="px-1 py-1.5 font-semibold tracking-wide text-center align-middle w-[8%] bg-slate-800 text-slate-200 border-r border-slate-700">Ref No</th>
-              <th className="px-1 py-1.5 font-semibold tracking-wide text-center align-middle w-[6%] bg-slate-800 text-slate-200 border-r border-slate-700">Transfer</th>
+              <th className="px-1 py-1.5 font-semibold tracking-wide text-center align-middle w-[6%] bg-slate-800 text-slate-200 border-r border-slate-700">TDS</th>
               
               <th className="px-1 py-1.5 font-semibold tracking-wide text-center align-middle w-[7%] bg-slate-800 text-slate-200 border-r border-slate-700">Status</th>
               <th className="px-1 py-1.5 font-semibold tracking-wide text-center align-middle w-[5%] bg-slate-800 text-slate-200">Action</th>
@@ -487,10 +454,7 @@ export default function Collections() {
                     savedRow={savedRow}
                     handleChange={handleChange}
                     handleSave={handleSave}
-                    handleRequestTransfer={handleRequestTransfer}
-                    transferBranches={transferBranches}
-                    requestingTransfer={requestingTransfer}
-                    transferEnabled={transferEnabled}
+
                     status={r.status as StatusFilter}
                     days={days}
                     overdue={overdue}

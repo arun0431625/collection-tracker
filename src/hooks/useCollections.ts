@@ -155,18 +155,25 @@ export function useCollections() {
     const e = edits[r.gr_no];
     const finalPaymentMode = e?.payment_mode ?? r.payment_mode;
     const finalAmount = e?.received_amount !== undefined ? Number(e.received_amount) : r.received_amount;
+    const finalTds = e?.tds_amount !== undefined ? Number(e.tds_amount) : (r.tds_amount ?? 0);
     const finalPaymentDate = e?.payment_date ?? r.payment_date;
     const finalRefNo = e?.ref_no ?? r.ref_no;
+    const maxTds = Math.round((r.total_freight || 0) * 0.02 * 100) / 100;
 
     const errors: Partial<Record<keyof EditState, boolean>> = {};
     if (!finalPaymentMode) errors.payment_mode = true;
     if (!finalAmount) errors.received_amount = true;
     if (!finalPaymentDate) errors.payment_date = true;
     if (!finalRefNo) errors.ref_no = true;
+    if (finalTds > maxTds) errors.tds_amount = true;
 
     if (Object.keys(errors).length > 0) {
       setRowErrors(prev => ({ ...prev, [r.gr_no]: errors }));
-      toast.error("Please fill in all required fields");
+      if (errors.tds_amount) {
+        toast.error(`TDS cannot exceed 2% of total freight (max ₹${maxTds.toLocaleString('en-IN')})`);
+      } else {
+        toast.error("Please fill in all required fields");
+      }
       return;
     } else {
       setRowErrors(prev => {
@@ -181,6 +188,7 @@ export function useCollections() {
       await updateCollectionPayment(r.gr_no, r.branch_code, {
         payment_mode: finalPaymentMode,
         received_amount: finalAmount,
+        tds_amount: finalTds,
         payment_date: finalPaymentDate,
         ref_no: finalRefNo,
         remarks: e?.remarks ?? r.remarks,
@@ -196,6 +204,7 @@ export function useCollections() {
         ...row,
         payment_mode: finalPaymentMode,
         received_amount: finalAmount,
+        tds_amount: finalTds,
         payment_date: finalPaymentDate,
         ref_no: finalRefNo,
         remarks: e?.remarks ?? row.remarks

@@ -1,190 +1,203 @@
-import { useEffect, useState } from "react";
-import { Check, Loader2, RefreshCw, X } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, Loader2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
-import {
-  approveBranchTransferRequest,
-  fetchBranchTransferRequests,
-  rejectBranchTransferRequest,
-  type BranchTransferRequest,
-} from "@/services/branchTransfers";
+import { searchGRForAdmin, updateGRBranch } from "@/services/admin";
+import { fetchAllBranchesLookup } from "@/services/collections.api";
 
-const STATUS_OPTIONS = ["PENDING", "APPROVED", "REJECTED"] as const;
+type GRSearchResult = {
+  gr_no: string;
+  branch_code: string;
+  party_name: string;
+  total_freight: number;
+};
 
 export default function BranchTransfers() {
-  const [status, setStatus] = useState<(typeof STATUS_OPTIONS)[number]>("PENDING");
-  const [requests, setRequests] = useState<BranchTransferRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [processingId, setProcessingId] = useState<string | null>(null);
-
-  async function loadRequests(nextStatus = status) {
-    try {
-      setLoading(true);
-      const data = await fetchBranchTransferRequests(nextStatus);
-      setRequests(data);
-    } catch (error: any) {
-      toast.error(error?.message || "Failed to load transfer requests.");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<GRSearchResult[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
+  
+  const [branches, setBranches] = useState<{branch_code: string, branch_name: string}[]>([]);
+  const [updating, setUpdating] = useState<string | null>(null);
+  
+  // Track selected branch code for each row. Key: `${gr_no}_${branch_code}`
+  const [selectedBranches, setSelectedBranches] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    void loadRequests(status);
-  }, [status]);
+    fetchAllBranchesLookup()
+      .then(lookup => {
+        const branchList = Array.from(lookup.entries()).map(([code, data]) => ({
+          branch_code: code,
+          branch_name: data.branch_name
+        }));
+        branchList.sort((a, b) => a.branch_code.localeCompare(b.branch_code));
+        setBranches(branchList);
+      })
+      .catch(err => console.error("Failed to fetch branches", err));
+  }, []);
 
-  async function handleApprove(id: string) {
+  async function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+    
+    setSearching(true);
+    setHasSearched(true);
     try {
-      setProcessingId(id);
-      await approveBranchTransferRequest(id);
-      toast.success("Transfer approved.");
-      await loadRequests();
-    } catch (error: any) {
-      toast.error(error?.message || "Failed to approve transfer.");
+      const results = await searchGRForAdmin(searchQuery.trim().toUpperCase());
+      setSearchResults(results as any[]);
+      
+      // Initialize dropdowns
+      const newSelections: Record<string, string> = {};
+      results.forEach((r: any) => {
+        newSelections[`${r.gr_no}_${r.branch_code}`] = r.branch_code;
+      });
+      setSelectedBranches(newSelections);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to search GR");
     } finally {
-      setProcessingId(null);
+      setSearching(false);
     }
   }
 
-  async function handleReject(id: string) {
-    const reason = window.prompt("Reject reason (optional)") || "";
+  async function handleUpdate(grNo: string, oldBranch: string) {
+    const newBranch = selectedBranches[`${grNo}_${oldBranch}`];
+    if (!newBranch || newBranch === oldBranch) {
+      toast.error("Please select a different branch.");
+      return;
+    }
+    
+    const rowKey = `${grNo}_${oldBranch}`;
+    setUpdating(rowKey);
     try {
-      setProcessingId(id);
-      await rejectBranchTransferRequest(id, reason);
-      toast.success("Transfer rejected.");
-      await loadRequests();
-    } catch (error: any) {
-      toast.error(error?.message || "Failed to reject transfer.");
+      await updateGRBranch(grNo, oldBranch, newBranch);
+      toast.success(`GR ${grNo} moved to ${newBranch} successfully.`);
+      
+      // Remove from list or refresh
+      setSearchResults(prev => prev.filter(r => !(r.gr_no === grNo && r.branch_code === oldBranch)));
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update branch");
     } finally {
-      setProcessingId(null);
+      setUpdating(null);
     }
   }
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold">Branch Transfer Requests</h1>
-          <div className="text-xs text-gray-500 mt-0.5">
-            Approve or reject branch change requests raised from Collections.
+    <div className="p-6 space-y-6 max-w-5xl mx-auto">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">GR Branch Management</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          Search for a GR number and update its controlling branch directly.
+        </p>
+      </div>
+
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+        <form onSubmit={handleSearch} className="flex gap-4 items-end">
+          <div className="flex-1 max-w-md">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              GR Number
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-5 w-5 text-gray-400" />
+              </div>
+              <input
+                type="text"
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Enter GR No. (e.g. 123456)"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+            </div>
           </div>
-        </div>
-        <button
-          onClick={() => void loadRequests()}
-          className="inline-flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-sm hover:bg-gray-50"
-        >
-          <RefreshCw size={15} />
-          Refresh
-        </button>
-      </div>
-
-      <div className="flex gap-2">
-        {STATUS_OPTIONS.map((item) => (
           <button
-            key={item}
-            onClick={() => setStatus(item)}
-            className={`rounded px-3 py-1.5 text-xs font-medium border ${
-              status === item
-                ? "bg-blue-600 text-white border-blue-600"
-                : "bg-white text-gray-700 hover:bg-gray-100"
-            }`}
+            type="submit"
+            disabled={searching || !searchQuery.trim()}
+            className="bg-blue-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition flex items-center gap-2 h-[42px]"
           >
-            {item}
+            {searching && <Loader2 className="animate-spin w-4 h-4" />}
+            Search
           </button>
-        ))}
+        </form>
       </div>
 
-      <div className="overflow-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-        <table className="w-full min-w-[980px] text-sm">
-          <thead className="bg-slate-800 text-slate-100">
-            <tr>
-              <th className="px-3 py-2 text-left">GR No</th>
-              <th className="px-3 py-2 text-left">Party</th>
-              <th className="px-3 py-2 text-left">From Branch</th>
-              <th className="px-3 py-2 text-left">To Branch</th>
-              <th className="px-3 py-2 text-right">Freight</th>
-              <th className="px-3 py-2 text-left">Requested By</th>
-              <th className="px-3 py-2 text-left">Requested At</th>
-              <th className="px-3 py-2 text-left">Status</th>
-              <th className="px-3 py-2 text-center">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
+      {hasSearched && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
               <tr>
-                <td colSpan={9} className="py-10 text-center text-gray-500">
-                  <Loader2 className="mx-auto mb-2 animate-spin" size={24} />
-                  Loading requests...
-                </td>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">GR Details</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Branch</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">New Branch</th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
               </tr>
-            ) : requests.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="py-10 text-center text-gray-500">
-                  No {status.toLowerCase()} transfer requests.
-                </td>
-              </tr>
-            ) : (
-              requests.map((request) => (
-                <tr key={request.id} className="border-b last:border-b-0 hover:bg-gray-50">
-                  <td className="px-3 py-2 font-semibold">{request.gr_no}</td>
-                  <td className="px-3 py-2">{request.party_name || "-"}</td>
-                  <td className="px-3 py-2">
-                    <div className="font-semibold">{request.from_branch_code}</div>
-                    <div className="text-xs text-gray-500">{request.from_branch_name || request.from_branch_code}</div>
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="font-semibold">{request.to_branch_code}</div>
-                    <div className="text-xs text-gray-500">{request.to_branch_name || request.to_branch_code}</div>
-                  </td>
-                  <td className="px-3 py-2 text-right font-semibold">
-                    Rs {Number(request.total_freight || 0).toLocaleString("en-IN")}
-                  </td>
-                  <td className="px-3 py-2 text-xs">{request.requested_by_email || "-"}</td>
-                  <td className="px-3 py-2 text-xs">
-                    {new Date(request.requested_at).toLocaleString("en-IN")}
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                      request.status === "APPROVED"
-                        ? "bg-green-100 text-green-700"
-                        : request.status === "REJECTED"
-                        ? "bg-red-100 text-red-700"
-                        : "bg-amber-100 text-amber-700"
-                    }`}>
-                      {request.status}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    {request.status === "PENDING" ? (
-                      <div className="flex justify-center gap-2">
-                        <button
-                          disabled={processingId === request.id}
-                          onClick={() => void handleApprove(request.id)}
-                          className="inline-flex items-center gap-1 rounded bg-green-600 px-3 py-1.5 text-xs text-white hover:bg-green-700 disabled:opacity-50"
-                        >
-                          {processingId === request.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                          Approve
-                        </button>
-                        <button
-                          disabled={processingId === request.id}
-                          onClick={() => void handleReject(request.id)}
-                          className="inline-flex items-center gap-1 rounded bg-red-600 px-3 py-1.5 text-xs text-white hover:bg-red-700 disabled:opacity-50"
-                        >
-                          <X size={13} />
-                          Reject
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-gray-500">
-                        {request.reject_reason || "-"}
-                      </span>
-                    )}
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {searching ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                    <Loader2 className="animate-spin w-6 h-6 mx-auto mb-2 text-blue-600" />
+                    Searching...
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : searchResults.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                    No GR found matching "{searchQuery}"
+                  </td>
+                </tr>
+              ) : (
+                searchResults.map((row) => {
+                  const rowKey = `${row.gr_no}_${row.branch_code}`;
+                  const isUpdating = updating === rowKey;
+                  const currentSelected = selectedBranches[rowKey] || row.branch_code;
+                  
+                  return (
+                    <tr key={rowKey} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="font-semibold text-gray-900">{row.gr_no}</div>
+                        <div className="text-sm text-gray-500">{row.party_name}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
+                        ₹ {row.total_freight?.toLocaleString("en-IN")}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                          {row.branch_code}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <select
+                          className="block w-full pl-3 pr-10 py-2 text-sm border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-md"
+                          value={currentSelected}
+                          onChange={(e) => setSelectedBranches(prev => ({ ...prev, [rowKey]: e.target.value }))}
+                          disabled={isUpdating}
+                        >
+                          {branches.map(b => (
+                            <option key={b.branch_code} value={b.branch_code}>
+                              {b.branch_code} {b.branch_name ? `- ${b.branch_name}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                        <button
+                          onClick={() => handleUpdate(row.gr_no, row.branch_code)}
+                          disabled={isUpdating || currentSelected === row.branch_code}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                          Update
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

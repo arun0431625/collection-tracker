@@ -16,6 +16,7 @@ export type CollectionFieldUpdateRow = {
   gr_no: string;
   payment_mode: string;
   received_amount: number;
+  tds_amount: number;
   payment_date: string;
   ref_no: string;
   remarks: string | null;
@@ -199,6 +200,29 @@ export async function setAppSetting(key: string, value: any) {
   const { error } = await supabase
     .from("app_settings")
     .upsert({ key, value });
+
+  if (error) {
+    throw new Error(getErrorMessage(error));
+  }
+}
+
+export async function searchGRForAdmin(grNo: string) {
+  const { data, error } = await supabase
+    .from("collections_lrs")
+    .select("gr_no, branch_code, party_name, total_freight, received_amount, payment_mode, payment_date, ref_no")
+    .eq("gr_no", grNo);
+
+  if (error) {
+    throw new Error(getErrorMessage(error));
+  }
+  return data || [];
+}
+
+export async function updateGRBranch(grNo: string, oldBranchCode: string, newBranchCode: string) {
+  const { error } = await supabase
+    .from("collections_lrs")
+    .update({ branch_code: newBranchCode })
+    .match({ gr_no: grNo, branch_code: oldBranchCode });
 
   if (error) {
     throw new Error(getErrorMessage(error));

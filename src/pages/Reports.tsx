@@ -333,7 +333,7 @@ useEffect(() => {
 
     let q = supabase
       .from("collections_lrs")
-      .select("branch_code, area_manager, gr_date, total_freight, received_amount");
+      .select("branch_code, area_manager, gr_date, total_freight, received_amount, tds_amount");
 
     if (role !== "ADMIN") q = q.eq("branch_code", branch);
     q = q.gte("gr_date", fromDate).lte("gr_date", toDate);
@@ -360,7 +360,7 @@ useEffect(() => {
         summaryMap[b] = { total_grs: 0, collected_grs: 0, total_freight: 0, collected: 0 };
       }
       const freight = r.total_freight || 0;
-      const received = Math.min(r.received_amount || 0, freight);
+      const received = Math.min((r.received_amount || 0) + (r.tds_amount || 0), freight);
 
       summaryMap[b].total_grs += 1;
       if (received >= freight && freight > 0) summaryMap[b].collected_grs += 1;
@@ -380,7 +380,7 @@ useEffect(() => {
     const today = new Date();
     const bucketMap: Record<string, number> = {};
     rows.forEach((r) => {
-      const bal = (r.total_freight || 0) - Math.min(r.received_amount || 0, r.total_freight || 0);
+      const bal = (r.total_freight || 0) - Math.min((r.received_amount || 0) + (r.tds_amount || 0), r.total_freight || 0);
       if (bal <= 0) return;
       const d = new Date(r.gr_date);
       const days = Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
@@ -403,7 +403,7 @@ useEffect(() => {
       const am = r.area_manager || "UNKNOWN";
       if (!amMap[am]) amMap[am] = { area_manager: am, totalGRs: 0, collectedGRs: 0, totalFreight: 0, collected: 0 };
       const freight = r.total_freight || 0;
-      const received = Math.min(r.received_amount || 0, freight);
+      const received = Math.min((r.received_amount || 0) + (r.tds_amount || 0), freight);
       amMap[am].totalGRs += 1;
       if (received >= freight && freight > 0) amMap[am].collectedGRs += 1;
       amMap[am].totalFreight += freight;

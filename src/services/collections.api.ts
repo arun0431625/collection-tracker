@@ -107,7 +107,7 @@ export async function fetchCollections({
     .from("collections_with_status")
     .select(
       `gr_no, area_manager, branch_code, gr_date, party_name, total_freight,
-       pay_mode, payment_mode, received_amount, payment_date, ref_no, remarks, status_calc`,
+       pay_mode, payment_mode, received_amount, tds_amount, payment_date, ref_no, remarks, status_calc`,
       { count: "exact" }
     );
 
@@ -172,6 +172,7 @@ export async function updateCollectionPayment(
   payload: {
     payment_mode?: string;
     received_amount?: number;
+    tds_amount?: number;
     payment_date?: string;
     ref_no?: string;
     remarks?: string;
@@ -182,6 +183,7 @@ export async function updateCollectionPayment(
     p_branch_code: branch_code,
     p_payment_mode: payload.payment_mode ?? null,
     p_received_amount: payload.received_amount ?? null,
+    p_tds_amount: payload.tds_amount ?? null,
     p_payment_date: payload.payment_date ?? null,
     p_ref_no: payload.ref_no ?? null,
     p_remarks: payload.remarks ?? null,
