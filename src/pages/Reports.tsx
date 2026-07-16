@@ -4,7 +4,7 @@
 // ✔ Area manager name fixed
 // ✔ Indian number format (thousands / lacs)
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useBranch } from "@/context/BranchContext";
 import * as XLSX from "xlsx";
@@ -22,13 +22,22 @@ collected: number;
 balance: number;
 };
 
+type SubBranchRow = {
+  branch_code: string;
+  total_grs: number;
+  collected_grs: number;
+  total_freight: number;
+  collected: number;
+};
+
 type MonthlyRow = {
-month: string;
-branch_code: string;
-total_grs: number;
-collected_grs: number;
-total_freight: number;
-collected: number;
+  month: string;
+  branch_code: string;
+  total_grs: number;
+  collected_grs: number;
+  total_freight: number;
+  collected: number;
+  sub_branches?: SubBranchRow[];
 };
 
 type AgeingRow = {
@@ -243,6 +252,12 @@ const PARTY_PAGE_SIZE = 25;
 const [branchPage, setBranchPage] = useState(1);
 const [partyPage, setPartyPage] = useState(1);
 
+const [expandedBranches, setExpandedBranches] = useState<Record<string, boolean>>({});
+
+const toggleBranch = (branchCode: string) => {
+  setExpandedBranches(prev => ({ ...prev, [branchCode]: !prev[branchCode] }));
+};
+
 // 🔹 Sorting state
 const [branchSort, setBranchSort] = useState<SortState | null>(null);
 const [areaSort, setAreaSort] = useState<SortState | null>(null);
@@ -291,20 +306,50 @@ useEffect(() => {
 
     const branchParam = role === "ADMIN" ? null : branch;
     const [resBranch, resArea, resAgeing] = await Promise.all([
-      supabase.rpc("get_reports_branch", { p_from_date: fromDate, p_to_date: toDate, p_branch_code: branchParam }),
+      supabase.rpc("get_reports_branch_detailed", { p_from_date: fromDate, p_to_date: toDate, p_branch_code: branchParam }),
       supabase.rpc("get_reports_area", { p_from_date: fromDate, p_to_date: toDate, p_branch_code: branchParam }),
       supabase.rpc("get_reports_ageing", { p_from_date: fromDate, p_to_date: toDate, p_branch_code: branchParam }),
     ]);
 
     if (!resBranch.error && !resArea.error && !resAgeing.error) {
-      const s1: MonthlyRow[] = (resBranch.data || []).map((r: any) => ({
-        month: `${fromDate} → ${toDate}`,
-        branch_code: r.branch_code,
-        total_grs: Number(r.total_grs),
-        collected_grs: Number(r.collected_grs),
-        total_freight: Number(r.total_freight),
-        collected: Number(r.collected),
-      }));
+      const summaryMap: Record<string, MonthlyRow> = {};
+
+      (resBranch.data || []).forEach((r: any) => {
+        const cb = r.controlling_branch;
+        if (!summaryMap[cb]) {
+          summaryMap[cb] = {
+            month: `${fromDate} → ${toDate}`,
+            branch_code: cb,
+            total_grs: 0,
+            collected_grs: 0,
+            total_freight: 0,
+            collected: 0,
+            sub_branches: []
+          };
+        }
+        
+        summaryMap[cb].total_grs += Number(r.total_grs);
+        summaryMap[cb].collected_grs += Number(r.collected_grs);
+        summaryMap[cb].total_freight += Number(r.total_freight);
+        summaryMap[cb].collected += Number(r.collected);
+        
+        summaryMap[cb].sub_branches!.push({
+          branch_code: r.branch_code === cb ? `${r.branch_code} (Direct)` : r.branch_code,
+          total_grs: Number(r.total_grs),
+          collected_grs: Number(r.collected_grs),
+          total_freight: Number(r.total_freight),
+          collected: Number(r.collected),
+        });
+      });
+      
+      const s1: MonthlyRow[] = Object.values(summaryMap).map(row => {
+        if (row.sub_branches!.length <= 1) {
+          row.sub_branches = [];
+        } else {
+          row.sub_branches!.sort((a, b) => a.branch_code.includes('(Direct)') ? -1 : b.branch_code.includes('(Direct)') ? 1 : a.branch_code.localeCompare(b.branch_code));
+        }
+        return row;
+      });
 
       const s2: AgeingRow[] = (resAgeing.data || []).map((r: any) => ({
         month: `${fromDate} → ${toDate}`,
@@ -331,6 +376,12 @@ useEffect(() => {
 
     console.warn("RPC missing, falling back to client-side grouping...");
 
+    const { data: branchesData } = await supabase.from("branches").select("branch_code, mapped_to");
+    const branchMap: Record<string, string> = {};
+    (branchesData || []).forEach(b => {
+      branchMap[b.branch_code.toUpperCase()] = b.mapped_to ? b.mapped_to.toUpperCase() : b.branch_code.toUpperCase();
+    });
+
     let q = supabase
       .from("collections_lrs")
       .select("branch_code, area_manager, gr_date, total_freight, received_amount, tds_amount");
@@ -353,29 +404,43 @@ useEffect(() => {
 
     const rows = allRows;
 
-    const summaryMap: Record<string, any> = {};
+    const summaryMap: Record<string, MonthlyRow> = {};
     rows.forEach((r) => {
-      const b = r.branch_code;
-      if (!summaryMap[b]) {
-        summaryMap[b] = { total_grs: 0, collected_grs: 0, total_freight: 0, collected: 0 };
+      const actualBranch = (r.branch_code || "UNKNOWN").toUpperCase();
+      const cb = branchMap[actualBranch] || actualBranch;
+      
+      if (!summaryMap[cb]) {
+        summaryMap[cb] = { month: `${fromDate} → ${toDate}`, branch_code: cb, total_grs: 0, collected_grs: 0, total_freight: 0, collected: 0, sub_branches: [] };
       }
+      
       const freight = r.total_freight || 0;
       const received = Math.min((r.received_amount || 0) + (r.tds_amount || 0), freight);
 
-      summaryMap[b].total_grs += 1;
-      if (received >= freight && freight > 0) summaryMap[b].collected_grs += 1;
-      summaryMap[b].total_freight += freight;
-      summaryMap[b].collected += received;
+      summaryMap[cb].total_grs += 1;
+      if (received >= freight && freight > 0) summaryMap[cb].collected_grs += 1;
+      summaryMap[cb].total_freight += freight;
+      summaryMap[cb].collected += received;
+      
+      const subBranchCode = actualBranch === cb ? `${actualBranch} (Direct)` : actualBranch;
+      let sub = summaryMap[cb].sub_branches!.find(s => s.branch_code === subBranchCode);
+      if (!sub) {
+        sub = { branch_code: subBranchCode, total_grs: 0, collected_grs: 0, total_freight: 0, collected: 0 };
+        summaryMap[cb].sub_branches!.push(sub);
+      }
+      sub.total_grs += 1;
+      if (received >= freight && freight > 0) sub.collected_grs += 1;
+      sub.total_freight += freight;
+      sub.collected += received;
     });
 
-    const s1: MonthlyRow[] = Object.entries(summaryMap).map(([branch_code, v]) => ({
-      month: `${fromDate} → ${toDate}`,
-      branch_code,
-      total_grs: v.total_grs,
-      collected_grs: v.collected_grs,
-      total_freight: v.total_freight,
-      collected: v.collected,
-    }));
+    const s1: MonthlyRow[] = Object.values(summaryMap).map(row => {
+      if (row.sub_branches!.length <= 1) {
+        row.sub_branches = [];
+      } else {
+        row.sub_branches!.sort((a, b) => a.branch_code.includes('(Direct)') ? -1 : b.branch_code.includes('(Direct)') ? 1 : a.branch_code.localeCompare(b.branch_code));
+      }
+      return row;
+    });
 
     const today = new Date();
     const bucketMap: Record<string, number> = {};
@@ -734,29 +799,65 @@ return (
             </tr>
           </thead>
           <tbody>
-              {pagedBranchRows.map((b) => (
-              <tr key={b.branch_code}>
-                <td className="border px-2 py-1">{b.branch_code}</td>
-                <td className="border px-2 py-1 text-center">{b.total_grs}</td>
-                <td className="border px-2 py-1 text-center">{b.collected_grs}</td>
-
-                <td className="border px-2 py-1 text-center">
-                  {pct(b.collected_grs, b.total_grs)}
-                </td>
-
-                <td className="border px-2 py-1 text-right">
-                  {CURRENCY_LABEL} {fmt(b.total_freight)}
-                </td>
-
-                <td className="border px-2 py-1 text-center">
-                  {pct(b.collected, b.total_freight)}
-                </td>
-
-                <td className="border px-2 py-1 text-right text-red-700">
-                  {CURRENCY_LABEL} {fmt(b.total_freight - b.collected)}
-                </td>
-              </tr>
-            ))}
+              {pagedBranchRows.map((b) => {
+                const hasSub = b.sub_branches && b.sub_branches.length > 0;
+                const isExpanded = expandedBranches[b.branch_code];
+                return (
+                  <React.Fragment key={b.branch_code}>
+                    <tr 
+                      className={`${hasSub ? "cursor-pointer hover:bg-blue-50" : "hover:bg-gray-50"}`}
+                      onClick={() => hasSub && toggleBranch(b.branch_code)}
+                    >
+                      <td className="border px-2 py-1 font-medium text-gray-900">
+                        <div className="flex items-center gap-2">
+                          <span>{b.branch_code}</span>
+                          {hasSub && (
+                            <span className="inline-flex items-center justify-center px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold">
+                              +{b.sub_branches!.length}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="border px-2 py-1 text-center font-medium">{b.total_grs}</td>
+                      <td className="border px-2 py-1 text-center font-medium">{b.collected_grs}</td>
+                      <td className="border px-2 py-1 text-center font-medium">
+                        {pct(b.collected_grs, b.total_grs)}
+                      </td>
+                      <td className="border px-2 py-1 text-right font-medium">
+                        {CURRENCY_LABEL} {fmt(b.total_freight)}
+                      </td>
+                      <td className="border px-2 py-1 text-center font-medium">
+                        {pct(b.collected, b.total_freight)}
+                      </td>
+                      <td className="border px-2 py-1 text-right text-red-700 font-bold">
+                        {CURRENCY_LABEL} {fmt(b.total_freight - b.collected)}
+                      </td>
+                    </tr>
+                    
+                    {isExpanded && hasSub && b.sub_branches!.map((sub, i) => (
+                      <tr key={`${b.branch_code}-sub-${i}`} className="bg-slate-50 hover:bg-slate-100 text-sm">
+                        <td className="border px-2 py-1 pl-6 text-slate-600 border-l-4 border-l-blue-400">
+                          &#x21b3; {sub.branch_code}
+                        </td>
+                        <td className="border px-2 py-1 text-center text-slate-600">{sub.total_grs}</td>
+                        <td className="border px-2 py-1 text-center text-slate-600">{sub.collected_grs}</td>
+                        <td className="border px-2 py-1 text-center text-slate-600">
+                          {pct(sub.collected_grs, sub.total_grs)}
+                        </td>
+                        <td className="border px-2 py-1 text-right text-slate-600">
+                          {CURRENCY_LABEL} {fmt(sub.total_freight)}
+                        </td>
+                        <td className="border px-2 py-1 text-center text-slate-600">
+                          {pct(sub.collected, sub.total_freight)}
+                        </td>
+                        <td className="border px-2 py-1 text-right text-red-600">
+                          {CURRENCY_LABEL} {fmt(sub.total_freight - sub.collected)}
+                        </td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
           </tbody>
         </table>      
         )}
