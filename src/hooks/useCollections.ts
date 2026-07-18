@@ -33,6 +33,7 @@ export function useCollections() {
   const [rowErrors, setRowErrors] = useState<Record<string, Partial<Record<keyof EditState, boolean>>>>({});
   
   const [statusFilter, setStatusFilter] = useSessionStorageState<StatusFilter>("coll_status", STATUS.ALL);
+  const [payModeFilter, setPayModeFilter] = useSessionStorageState<string>("coll_paymode", "ALL");
   const [search, setSearch] = useSessionStorageState<string>("coll_search", "");
   const [selectedMonth, setSelectedMonth] = useSessionStorageState<string>("coll_month", "");
   const [selectedBranch, setSelectedBranch] = useSessionStorageState<string>("coll_branch", "");
@@ -92,7 +93,7 @@ export function useCollections() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, deferredSearch, selectedMonth]);
+  }, [statusFilter, payModeFilter, deferredSearch, selectedMonth]);
 
   const fetchGRs = useCallback(async () => {
     setLoading(true);
@@ -106,18 +107,21 @@ export function useCollections() {
           status: statusFilter,
           search: deferredSearch,
           month: selectedMonth,
+          payMode: payModeFilter,
         }),
         supabase.rpc("get_collections_kpi", {
           p_branch: effectiveBranch,
           p_month: selectedMonth || null,
           p_status: statusFilter,
           p_search: deferredSearch || null,
+          p_pay_mode: payModeFilter,
         }),
         supabase.rpc("get_collections_aging", {
           p_branch: effectiveBranch,
           p_month: selectedMonth || null,
           p_status: statusFilter,
           p_search: deferredSearch || null,
+          p_pay_mode: payModeFilter,
         }),
       ]);
       setRows(result.rows as GRRow[]);
@@ -135,7 +139,7 @@ export function useCollections() {
     } finally {
       setLoading(false);
     }
-  }, [branch, currentPage, deferredSearch, effectiveBranch, role, selectedBranch, selectedMonth, statusFilter, updateKpiTotals, pageSize]);
+  }, [branch, currentPage, deferredSearch, effectiveBranch, role, selectedBranch, selectedMonth, statusFilter, payModeFilter, updateKpiTotals, pageSize]);
 
   useEffect(() => {
     if (!branch) return;
@@ -245,6 +249,8 @@ export function useCollections() {
     rowErrors,
     statusFilter,
     setStatusFilter,
+    payModeFilter,
+    setPayModeFilter,
     search,
     setSearch,
     selectedMonth,

@@ -25,6 +25,8 @@ export default function Collections() {
     rowErrors,
     statusFilter,
     setStatusFilter,
+    payModeFilter,
+    setPayModeFilter,
     search,
     setSearch,
     selectedMonth,
@@ -100,6 +102,7 @@ export default function Collections() {
           status: statusFilter,
           search: search,
           month: selectedMonth,
+          payMode: payModeFilter,
         });
         totalCount = result.totalCount;
         allRows = allRows.concat(result.rows);
@@ -347,6 +350,23 @@ export default function Collections() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+
+        <div className="flex items-center gap-2 ml-2">
+          <span className="text-sm font-bold text-gray-700">Pay Mode:</span>
+          <select
+            value={payModeFilter}
+            onChange={(e) => {
+              setCurrentPage(1);
+              setPayModeFilter(e.target.value);
+            }}
+            className="border px-3 py-1.5 rounded-md text-sm bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="ALL">All Modes</option>
+            <option value="Paid">Paid</option>
+            <option value="To Pay">To Pay</option>
+          </select>
+        </div>
+
         <div className="flex items-center gap-2 ml-2">
           <span className="text-sm font-bold text-gray-700">Month:</span>
           <select

@@ -94,6 +94,7 @@ export async function fetchCollections({
   status,
   search,
   month,
+  payMode = "ALL",
 }: {
   branch: string;
   role: "ADMIN" | "BRANCH";
@@ -102,6 +103,7 @@ export async function fetchCollections({
   status: string;
   search: string;
   month?: string;
+  payMode?: string;
 }) {
   let query = supabase
     .from("collections_with_status")
@@ -148,6 +150,11 @@ export async function fetchCollections({
   // Search
   if (search.trim()) {
     query = query.or(`gr_no.ilike.%${search}%,party_name.ilike.%${search}%`);
+  }
+
+  // Pay Mode Filter
+  if (payMode !== "ALL") {
+    query = query.eq("pay_mode", payMode);
   }
 
   // Pagination
