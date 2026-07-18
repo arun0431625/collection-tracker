@@ -51,9 +51,11 @@ export default function Collections() {
   }
 
   function getStatus(r: GRRow): StatusFilter {
-    const received = r.received_amount || 0;
-    if (received >= r.total_freight) return STATUS.COLLECTED;
-    if (received > 0) return STATUS.PARTIAL;
+    const received = Number(r.received_amount) || 0;
+    const tds = Number(r.tds_amount) || 0;
+    const freight = Number(r.total_freight) || 0;
+    if (received + tds >= freight && freight > 0) return STATUS.COLLECTED;
+    if (received + tds > 0) return STATUS.PARTIAL;
     return STATUS.PENDING;
   }
 
@@ -459,9 +461,10 @@ export default function Collections() {
             ) : (
               rows.map((r) => {
                 const e = edits[r.gr_no];
-                const status = getStatus(r);
+                const currentData = { ...r, ...e };
+                const status = getStatus(currentData as GRRow);
                 const days = getPendingDays(r.gr_date);
-                const overdue = isOverdue(r);
+                const overdue = isOverdue(currentData as GRRow);
                 const rowClass = getRowClass(status, overdue);
 
                 return (
@@ -475,7 +478,7 @@ export default function Collections() {
                     handleChange={handleChange}
                     handleSave={handleSave}
 
-                    status={r.status as StatusFilter}
+                    status={status}
                     days={days}
                     overdue={overdue}
                     rowClass={rowClass}
