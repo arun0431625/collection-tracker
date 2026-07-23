@@ -7,6 +7,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useBranch } from "@/context/BranchContext";
+import { useViewer } from "@/context/ViewerContext";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import { useSessionStorageState } from "@/hooks/useSessionStorageState";
@@ -224,6 +225,8 @@ async function fetchPartyOutstandingPage({
 
 export default function Reports() {
 const { branch, role } = useBranch();
+const { isViewer } = useViewer();
+const isAdminOrViewer = role === "ADMIN" || isViewer;
 
 const [areaRows, setAreaRows] = useState<AreaRow[]>([]);
 
@@ -299,12 +302,12 @@ useEffect(() => {
 
 // ================= MAIN REPORT FETCH =================
 useEffect(() => {
-  if (!branch) return;
+  if (!branch && !isViewer) return;
 
   async function fetchReports() {
     setLoading(true);
 
-    const branchParam = role === "ADMIN" ? null : branch;
+    const branchParam = isAdminOrViewer ? null : branch;
     const [resBranch, resArea, resAgeing] = await Promise.all([
       supabase.rpc("get_reports_branch_detailed", { p_from_date: fromDate, p_to_date: toDate, p_branch_code: branchParam }),
       supabase.rpc("get_reports_area", { p_from_date: fromDate, p_to_date: toDate, p_branch_code: branchParam }),

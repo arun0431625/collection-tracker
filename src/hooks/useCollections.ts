@@ -5,12 +5,14 @@ import { EditState, GRRow } from "@/types/collections";
 import { StatusFilter, STATUS } from "@/types/constants";
 import { toast } from "sonner";
 import { useBranch } from "@/context/BranchContext";
+import { useViewer } from "@/context/ViewerContext";
 import { useSessionStorageState } from "./useSessionStorageState";
 
 export function useCollections() {
   const { branch, role } = useBranch();
-  const isAdmin = role === "ADMIN";
-  const canEdit = role === "BRANCH";
+  const { isViewer } = useViewer();
+  const isAdmin = role === "ADMIN" || isViewer;
+  const canEdit = role === "BRANCH" && !isViewer;
 
   const [rows, setRows] = useState<GRRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,7 +75,7 @@ export function useCollections() {
   useEffect(() => {
     const fetchBranches = async () => {
       try {
-        if (role === "ADMIN") {
+        if (role === "ADMIN" || isViewer) {
           const branches = await fetchAccessibleCollectionBranchCodes();
           setBranchOptions(branches);
         } else if (branch) {
@@ -89,7 +91,7 @@ export function useCollections() {
       }
     };
     fetchBranches();
-  }, [role, branch]);
+  }, [role, branch, isViewer]);
 
   useEffect(() => {
     setCurrentPage(1);
