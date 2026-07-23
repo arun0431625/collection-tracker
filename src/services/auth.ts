@@ -93,8 +93,9 @@ export async function signInAuto(
   username: string,
   password: string
 ): Promise<{ type: "branch"; profile: BranchProfile } | { type: "viewer" }> {
+  const cleanUsername = username.trim();
   // Try branch login first
-  const branchEmail = branchCodeToEmail(username.trim().toUpperCase());
+  const branchEmail = branchCodeToEmail(cleanUsername.toUpperCase());
   const { error: branchError } = await supabase.auth.signInWithPassword({
     email: branchEmail,
     password,
@@ -115,7 +116,7 @@ export async function signInAuto(
   }
 
   // Branch login failed — try viewer login
-  const viewerEmail = viewerUsernameToEmail(username);
+  const viewerEmail = viewerUsernameToEmail(cleanUsername.toLowerCase());
   const { error: viewerError } = await supabase.auth.signInWithPassword({
     email: viewerEmail,
     password,
@@ -126,7 +127,7 @@ export async function signInAuto(
   }
 
   // Both failed
-  throw new Error(`Branch: ${branchError?.message || "failed"}. Viewer: ${viewerError?.message || "failed"}`);
+  throw new Error("Invalid username or password.");
 }
 
 export async function signOutCurrentUser() {
