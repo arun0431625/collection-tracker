@@ -163,6 +163,7 @@ export async function fetchCollections({
 
   const { data, error, count } = await query
     .order("gr_date", { ascending: false })
+    .order("gr_no", { ascending: true })
     .range(from, to);
 
   if (error) throw error;
