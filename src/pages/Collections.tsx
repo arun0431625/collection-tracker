@@ -128,9 +128,9 @@ export default function Collections() {
 
       for (let i = 0; i < allRows.length; i++) {
         const r = allRows[i];
-        const freight = r.total_freight || 0;
-        const received = r.received_amount || 0;
-        const tds = r.tds_amount || 0;
+        const freight = Number(r.total_freight) || 0;
+        const received = Number(r.received_amount) || 0;
+        const tds = Number(r.tds_amount) || 0;
         const totalCollected = received + tds;
         const capped = Math.min(totalCollected, freight);
         const branchCodeUpper = (r.branch_code || "").trim().toUpperCase();
