@@ -103,7 +103,7 @@ export function useCollections() {
       const [result, kpiResult, agingResult] = await Promise.all([
         fetchCollections({
           branch: effectiveBranch as string,
-          role: role as "ADMIN" | "BRANCH",
+          role: isAdmin ? "ADMIN" : (role as "ADMIN" | "BRANCH"),
           page: currentPage,
           pageSize,
           status: statusFilter,
@@ -144,9 +144,9 @@ export function useCollections() {
   }, [branch, currentPage, deferredSearch, effectiveBranch, role, selectedBranch, selectedMonth, statusFilter, payModeFilter, updateKpiTotals, pageSize]);
 
   useEffect(() => {
-    if (!branch) return;
+    if (!branch && !isViewer) return;
     fetchGRs();
-  }, [fetchGRs, branch]);
+  }, [fetchGRs, branch, isViewer]);
 
   const handleChange = useCallback((grNo: string, field: keyof EditState, value: string) => {
     setEdits((prev) => ({
