@@ -221,7 +221,8 @@ export function useCollections() {
         p_branch: effectiveBranch,
         p_month: selectedMonth || null,
         p_status: statusFilter,
-        p_search: deferredSearch || null
+        p_search: deferredSearch || null,
+        p_pay_mode: payModeFilter,
       });
 
       updateKpiTotals(kpiData || null);
@@ -232,7 +233,7 @@ export function useCollections() {
     } finally {
       setSavingRow(null);
     }
-  }, [canEdit, deferredSearch, edits, effectiveBranch, selectedMonth, statusFilter, updateKpiTotals]);
+  }, [canEdit, deferredSearch, edits, effectiveBranch, selectedMonth, statusFilter, payModeFilter, updateKpiTotals]);
 
   return {
     rows,

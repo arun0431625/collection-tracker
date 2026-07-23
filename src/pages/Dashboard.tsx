@@ -219,7 +219,10 @@ export default function Dashboard() {
   const [tm, setTm] = useSessionStorageState<number>("dash_tm", today.getMonth() + 1);
   const [td, setTd] = useSessionStorageState<number>("dash_td", today.getDate());
 
-  const [range, setRange] = useState<{ from: string; to: string } | null>(null);
+  const [range, setRange] = useState<{ from: string; to: string }>(() => ({
+    from: toISO(fy, fm, fd),
+    to: toISO(ty, tm, td),
+  }));
   const [error, setError] = useState("");
 
   const [kpi, setKpi] = useState<KPI>({

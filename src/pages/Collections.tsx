@@ -124,13 +124,15 @@ export default function Collections() {
       });
 
       // Build summary WHILE transforming (single pass)
-      const summaryMap = new Map<string, { controllingBranch: string; branchName: string; areaManager: string; grs: number; freight: number; received: number; balance: number }>();
+      const summaryMap = new Map<string, { controllingBranch: string; branchName: string; areaManager: string; grs: number; freight: number; received: number; tds: number; balance: number }>();
 
       for (let i = 0; i < allRows.length; i++) {
         const r = allRows[i];
         const freight = r.total_freight || 0;
         const received = r.received_amount || 0;
-        const capped = Math.min(received, freight);
+        const tds = r.tds_amount || 0;
+        const totalCollected = received + tds;
+        const capped = Math.min(totalCollected, freight);
         const branchCodeUpper = (r.branch_code || "").trim().toUpperCase();
         const branchInfo = branchLookup.get(branchCodeUpper) || {
           branch_name: r.branch_code || "",
@@ -146,11 +148,12 @@ export default function Collections() {
             controllingBranch: branchInfo.mapped_to,
             branchName: branchInfo.branch_name,
             areaManager: branchInfo.area_manager || r.area_manager || "",
-            grs: 0, freight: 0, received: 0, balance: 0,
+            grs: 0, freight: 0, received: 0, tds: 0, balance: 0,
           };
           item.grs += 1;
           item.freight += freight;
-          item.received += capped;
+          item.received += received;
+          item.tds += tds;
           item.balance += bal;
           summaryMap.set(code, item);
         }
@@ -164,7 +167,8 @@ export default function Collections() {
           Date: r.gr_date,
           Party: r.party_name,
           Freight: freight,
-          Received: capped,
+          Received: received,
+          TDS: tds,
           Balance: bal,
           Status: getStatus(r as GRRow),
           Payment_Mode: r.payment_mode || "",
@@ -180,7 +184,7 @@ export default function Collections() {
         // ---- CSV export for large datasets (browser can't handle XLSX for 2L+ rows) ----
         toast.loading(`Generating CSV for ${allRows.length} rows...`, { id: toastId });
 
-        const headers = ["Controlling_Branch","Branch_Code","Branch_Name","Area_Manager","GR_No","Date","Party","Freight","Received","Balance","Status","Payment_Mode","Ref_No","Remarks"];
+        const headers = ["Controlling_Branch","Branch_Code","Branch_Name","Area_Manager","GR_No","Date","Party","Freight","Received","TDS","Balance","Status","Payment_Mode","Ref_No","Remarks"];
 
         // Build CSV in chunks to avoid single giant string allocation
         const csvChunks: string[] = [];
@@ -223,6 +227,7 @@ export default function Collections() {
               GRs: val.grs,
               Freight: val.freight,
               Received: val.received,
+              TDS: val.tds,
               Balance: val.balance,
             }));
 
@@ -251,6 +256,7 @@ export default function Collections() {
               GRs: val.grs,
               Freight: val.freight,
               Received: val.received,
+              TDS: val.tds,
               Balance: val.balance,
             }));
 
