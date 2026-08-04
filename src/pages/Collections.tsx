@@ -166,6 +166,7 @@ export default function Collections() {
           GR_No: r.gr_no,
           Date: r.gr_date,
           Party: r.party_name,
+          Pay_Mode: r.pay_mode || "",
           Freight: freight,
           Received: received,
           TDS: tds,
