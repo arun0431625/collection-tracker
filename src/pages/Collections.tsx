@@ -185,7 +185,7 @@ export default function Collections() {
         // ---- CSV export for large datasets (browser can't handle XLSX for 2L+ rows) ----
         toast.loading(`Generating CSV for ${allRows.length} rows...`, { id: toastId });
 
-        const headers = ["Controlling_Branch","Branch_Code","Branch_Name","Area_Manager","GR_No","Date","Party","Freight","Received","TDS","Balance","Status","Payment_Mode","Ref_No","Remarks"];
+        const headers = ["Controlling_Branch","Branch_Code","Branch_Name","Area_Manager","GR_No","Date","Party","Pay_Mode","Freight","Received","TDS","Balance","Status","Payment_Mode","Ref_No","Remarks"];
 
         // Build CSV in chunks to avoid single giant string allocation
         const csvChunks: string[] = [];
