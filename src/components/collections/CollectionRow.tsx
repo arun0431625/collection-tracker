@@ -1,6 +1,7 @@
 import React from "react";
 import { EditState, GRRow } from "@/types/collections";
 import { StatusFilter } from "@/types/constants";
+import { History } from "lucide-react";
 
 
 function formatDate(dateStr: string | undefined | null) {
@@ -22,6 +23,7 @@ type CollectionRowProps = {
   savedRow: string | null;
   handleChange: (grNo: string, field: keyof EditState, value: string) => void;
   handleSave: (r: GRRow) => void;
+  onOpenHistory: (r: GRRow) => void;
 
   status: StatusFilter;
   days: number;
@@ -38,6 +40,7 @@ export const CollectionRow = React.memo(function CollectionRow({
   savedRow,
   handleChange,
   handleSave,
+  onOpenHistory,
 
   status,
   days,
@@ -152,6 +155,16 @@ export const CollectionRow = React.memo(function CollectionRow({
           <span className="text-amber-600">Partial<br/>{days}d</span>
         ) : (
           <span className="text-gray-600">Pending<br/>{days}d</span>
+        )}
+        {(status === "COLLECTED" || status === "PARTIAL" || (Number(r.received_amount) > 0)) && (
+          <button
+            onClick={() => onOpenHistory(r)}
+            className="mt-1 flex items-center justify-center gap-1 mx-auto px-1.5 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:border-blue-300 text-[10px] font-medium transition cursor-pointer"
+            title="View Payments / Add Installment"
+          >
+            <History size={10} />
+            <span>Pay Log</span>
+          </button>
         )}
       </td>
       <td className="px-1 py-1.5 border-b border-gray-200 text-center">

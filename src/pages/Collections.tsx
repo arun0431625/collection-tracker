@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import { useCollections } from "@/hooks/useCollections";
 import { CollectionRow } from "@/components/collections/CollectionRow";
+import PaymentHistoryModal from "@/components/collections/PaymentHistoryModal";
 import { STATUS, StatusFilter } from "@/types/constants";
 import { GRRow } from "@/types/collections";
 import { fetchAllBranchesLookup, fetchCollections } from "@/services/collections.api";
@@ -37,12 +38,20 @@ export default function Collections() {
     monthOptions,
     handleChange,
     handleSave,
+    fetchGRs,
     branch,
     effectiveBranch,
     role,
     isAdmin,
     canEdit,
   } = useCollections();
+
+  const [paymentHistoryGr, setPaymentHistoryGr] = useState<GRRow | null>(null);
+
+  const handleOpenHistory = useCallback((r: GRRow) => {
+    setPaymentHistoryGr(r);
+  }, []);
+
   useEffect(() => {
   }, []);
 
@@ -484,6 +493,7 @@ export default function Collections() {
                     savedRow={savedRow}
                     handleChange={handleChange}
                     handleSave={handleSave}
+                    onOpenHistory={handleOpenHistory}
 
                     status={status}
                     days={days}
@@ -523,6 +533,16 @@ export default function Collections() {
           </div>
         </div>
       </div>
+
+      {/* Payment History Modal */}
+      {paymentHistoryGr && (
+        <PaymentHistoryModal
+          gr={paymentHistoryGr}
+          canEdit={canEdit}
+          onClose={() => setPaymentHistoryGr(null)}
+          onUpdated={() => fetchGRs()}
+        />
+      )}
     </div>
   );
 }

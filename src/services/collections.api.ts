@@ -207,3 +207,50 @@ export async function fetchCollectionMonths() {
   if (error) throw error as any;
   return (data || []) as { value: string; label: string }[];
 }
+
+export type PaymentHistoryRecord = {
+  id: string;
+  gr_no: string;
+  branch_code: string;
+  payment_mode: string;
+  received_amount: number;
+  tds_amount: number;
+  payment_date: string;
+  ref_no: string | null;
+  remarks: string | null;
+  created_at: string;
+};
+
+export async function fetchCollectionPaymentHistory(gr_no: string, branch_code: string): Promise<PaymentHistoryRecord[]> {
+  const { data, error } = await supabase.rpc("get_collection_payment_history", {
+    p_gr_no: gr_no,
+    p_branch_code: branch_code,
+  });
+  if (error) throw error;
+  return data as PaymentHistoryRecord[];
+}
+
+export async function addCollectionPayment(
+  gr_no: string,
+  branch_code: string,
+  payload: {
+    payment_mode: string;
+    received_amount: number;
+    tds_amount: number;
+    payment_date: string;
+    ref_no?: string;
+    remarks?: string;
+  }
+) {
+  const { error } = await supabase.rpc("add_collection_payment", {
+    p_gr_no: gr_no,
+    p_branch_code: branch_code,
+    p_payment_mode: payload.payment_mode,
+    p_received_amount: payload.received_amount,
+    p_tds_amount: payload.tds_amount,
+    p_payment_date: payload.payment_date,
+    p_ref_no: payload.ref_no ?? null,
+    p_remarks: payload.remarks ?? null,
+  });
+  if (error) throw error;
+}

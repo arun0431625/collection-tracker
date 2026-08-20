@@ -264,6 +264,7 @@ export function useCollections() {
     monthOptions,
     handleChange,
     handleSave,
+    fetchGRs,
     branch,
     effectiveBranch,
     role,
