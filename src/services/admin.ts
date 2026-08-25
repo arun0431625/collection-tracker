@@ -228,3 +228,59 @@ export async function updateGRBranch(grNo: string, oldBranchCode: string, newBra
     throw new Error(getErrorMessage(error));
   }
 }
+
+export async function searchGRsBulkForAdmin(grNos: string[]) {
+  const { data, error } = await supabase
+    .from("collections_lrs")
+    .select("gr_no, branch_code, party_name, total_freight, received_amount, payment_mode, payment_date, ref_no")
+    .in("gr_no", grNos);
+
+  if (error) {
+    throw new Error(getErrorMessage(error));
+  }
+  return data || [];
+}
+
+export async function updateGRsBranchBulk(grs: { gr_no: string; old_branch_code: string }[], newBranchCode: string) {
+  const promises = grs.map(async (item) => {
+    await supabase
+      .from("collection_payments")
+      .update({ branch_code: newBranchCode })
+      .match({ gr_no: item.gr_no, branch_code: item.old_branch_code });
+
+    const { error } = await supabase
+      .from("collections_lrs")
+      .update({ branch_code: newBranchCode })
+      .match({ gr_no: item.gr_no, branch_code: item.old_branch_code });
+      
+    if (error) throw error;
+  });
+
+  try {
+    await Promise.all(promises);
+  } catch (err: any) {
+    throw new Error(getErrorMessage(err));
+  }
+}
+
+export async function deleteGRsForAdmin(grs: { gr_no: string; branch_code: string }[]) {
+  const promises = grs.map(async (item) => {
+    await supabase
+      .from("collection_payments")
+      .delete()
+      .match({ gr_no: item.gr_no, branch_code: item.branch_code });
+
+    const { error } = await supabase
+      .from("collections_lrs")
+      .delete()
+      .match({ gr_no: item.gr_no, branch_code: item.branch_code });
+
+    if (error) throw error;
+  });
+
+  try {
+    await Promise.all(promises);
+  } catch (err: any) {
+    throw new Error(getErrorMessage(err));
+  }
+}

@@ -108,7 +108,7 @@ export default function Sidebar({ onLogout }: SidebarProps) {
         {role === "ADMIN" && (
           <>
             <NavItem to="/admin-upload" icon={<Upload size={18} />} label="Admin Upload" collapsed={collapsed} />
-            <NavItem to="/branch-transfers" icon={<ArrowRightLeft size={18} />} label="Transfers" collapsed={collapsed} />
+            <NavItem to="/branch-transfers" icon={<ArrowRightLeft size={18} />} label="Transfer / Delete" collapsed={collapsed} />
             <NavItem to="/security" icon={<ShieldCheck size={18} />} label="Security" collapsed={collapsed} />
           </>
         )}
