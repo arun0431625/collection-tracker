@@ -10,7 +10,7 @@ import { useSessionStorageState } from "./useSessionStorageState";
 
 export function useCollections() {
   const { branch, role } = useBranch();
-  const { isViewer } = useViewer();
+  const { isViewer, viewer } = useViewer();
   const isAdmin = role === "ADMIN" || isViewer;
   const canEdit = role === "BRANCH" && !isViewer;
 
@@ -39,6 +39,7 @@ export function useCollections() {
   const [search, setSearch] = useSessionStorageState<string>("coll_search", "");
   const [selectedMonth, setSelectedMonth] = useSessionStorageState<string>("coll_month", "");
   const [selectedBranch, setSelectedBranch] = useSessionStorageState<string>("coll_branch", "");
+  const [selectedFy, setSelectedFy] = useSessionStorageState<string>("coll_fy", "2026-27");
   
   const effectiveBranch = isAdmin 
     ? (selectedBranch || null) 
@@ -75,13 +76,15 @@ export function useCollections() {
   useEffect(() => {
     const fetchBranches = async () => {
       try {
-        if (role === "ADMIN" || isViewer) {
+        if (isViewer && viewer?.accessible_branches?.length) {
+          // Viewer users: use their allowed branches list
+          setBranchOptions([...viewer.accessible_branches].sort());
+        } else if (role === "ADMIN") {
           const branches = await fetchAccessibleCollectionBranchCodes();
           setBranchOptions(branches);
         } else if (branch) {
           const { getSubBranchCodes } = await import("@/services/collections.api");
           const subBranches = await getSubBranchCodes(branch);
-          // Only show dropdown if there are sub-branches mapped to it
           if (subBranches.length > 1) {
             setBranchOptions(subBranches);
           }
@@ -91,11 +94,11 @@ export function useCollections() {
       }
     };
     fetchBranches();
-  }, [role, branch, isViewer]);
+  }, [role, branch, isViewer, viewer]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, payModeFilter, deferredSearch, selectedMonth]);
+  }, [statusFilter, payModeFilter, deferredSearch, selectedMonth, selectedFy]);
 
   const fetchGRs = useCallback(async () => {
     setLoading(true);
@@ -109,6 +112,7 @@ export function useCollections() {
           status: statusFilter,
           search: deferredSearch,
           month: selectedMonth,
+          fy: selectedFy === "ALL" ? undefined : selectedFy,
           payMode: payModeFilter,
         }),
         supabase.rpc("get_collections_kpi", {
@@ -117,6 +121,7 @@ export function useCollections() {
           p_status: statusFilter,
           p_search: deferredSearch || null,
           p_pay_mode: payModeFilter,
+          p_fy: selectedFy === "ALL" ? null : selectedFy,
         }),
         supabase.rpc("get_collections_aging", {
           p_branch: effectiveBranch,
@@ -124,6 +129,7 @@ export function useCollections() {
           p_status: statusFilter,
           p_search: deferredSearch || null,
           p_pay_mode: payModeFilter,
+          p_fy: selectedFy === "ALL" ? null : selectedFy,
         }),
       ]);
       setRows(result.rows as GRRow[]);
@@ -141,7 +147,7 @@ export function useCollections() {
     } finally {
       setLoading(false);
     }
-  }, [branch, currentPage, deferredSearch, effectiveBranch, role, selectedBranch, selectedMonth, statusFilter, payModeFilter, updateKpiTotals, pageSize]);
+  }, [branch, currentPage, deferredSearch, effectiveBranch, role, selectedBranch, selectedMonth, selectedFy, statusFilter, payModeFilter, updateKpiTotals, pageSize]);
 
   useEffect(() => {
     if (!branch && !isViewer) return;
@@ -225,6 +231,7 @@ export function useCollections() {
         p_status: statusFilter,
         p_search: deferredSearch || null,
         p_pay_mode: payModeFilter,
+        p_fy: selectedFy === "ALL" ? null : selectedFy,
       });
 
       updateKpiTotals(kpiData || null);
@@ -235,7 +242,7 @@ export function useCollections() {
     } finally {
       setSavingRow(null);
     }
-  }, [canEdit, deferredSearch, edits, effectiveBranch, selectedMonth, statusFilter, payModeFilter, updateKpiTotals]);
+  }, [canEdit, deferredSearch, edits, effectiveBranch, selectedMonth, selectedFy, statusFilter, payModeFilter, updateKpiTotals]);
 
   return {
     rows,
@@ -260,6 +267,8 @@ export function useCollections() {
     setSelectedMonth,
     selectedBranch,
     setSelectedBranch,
+    selectedFy,
+    setSelectedFy,
     branchOptions,
     monthOptions,
     handleChange,

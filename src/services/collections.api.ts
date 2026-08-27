@@ -94,6 +94,7 @@ export async function fetchCollections({
   status,
   search,
   month,
+  fy,
   payMode = "ALL",
 }: {
   branch: string;
@@ -103,6 +104,7 @@ export async function fetchCollections({
   status: string;
   search: string;
   month?: string;
+  fy?: string;
   payMode?: string;
 }) {
   let query = supabase
@@ -145,6 +147,15 @@ export async function fetchCollections({
     query = query
       .gte("gr_date", start)
       .lt("gr_date", end.toISOString().slice(0, 10));
+  }
+
+  // FY filter (e.g. "2025-26")
+  if (fy) {
+    const startYear = fy.split("-")[0];
+    const endYear = (parseInt(startYear, 10) + 1).toString();
+    query = query
+      .gte("gr_date", `${startYear}-04-01`)
+      .lt("gr_date", `${endYear}-04-01`);
   }
 
   // Search

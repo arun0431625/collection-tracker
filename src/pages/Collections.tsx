@@ -34,6 +34,8 @@ export default function Collections() {
     setSelectedMonth,
     selectedBranch,
     setSelectedBranch,
+    selectedFy,
+    setSelectedFy,
     branchOptions,
     monthOptions,
     handleChange,
@@ -287,7 +289,7 @@ export default function Collections() {
 
   return (
     <div className="p-4 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold">
             Collections
@@ -300,26 +302,46 @@ export default function Collections() {
           </div>
         </div>
 
-        {branchOptions.length > 1 && (
+        <div className="flex items-center gap-4 flex-wrap">
+          {/* FY Filter Dropdown */}
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-gray-700">Branch:</span>
+            <span className="text-sm font-semibold text-gray-700">FY:</span>
             <select
-              className="w-full sm:w-auto min-w-[150px] px-3 py-1.5 border border-slate-300 rounded-md text-sm bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-              value={selectedBranch}
+              className="w-full sm:w-auto min-w-[120px] px-3 py-1.5 border border-slate-300 rounded-md text-sm bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium"
+              value={selectedFy}
               onChange={(e) => {
                 setCurrentPage(1);
-                setSelectedBranch(e.target.value);
+                setSelectedFy(e.target.value);
               }}
             >
-              <option value="">All Branches</option>
-              {branchOptions.map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
+              <option value="ALL">All Years</option>
+              <option value="2026-27">FY 2026-27</option>
+              <option value="2025-26">FY 2025-26</option>
             </select>
           </div>
-        )}
+
+          {/* Branch Filter Dropdown */}
+          {branchOptions.length > 1 && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-gray-700">Branch:</span>
+              <select
+                className="w-full sm:w-auto min-w-[150px] px-3 py-1.5 border border-slate-300 rounded-md text-sm bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                value={selectedBranch}
+                onChange={(e) => {
+                  setCurrentPage(1);
+                  setSelectedBranch(e.target.value);
+                }}
+              >
+                <option value="">All Branches</option>
+                {branchOptions.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* KPI BAR */}

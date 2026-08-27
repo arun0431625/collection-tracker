@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
+import { Loader2 } from "lucide-react";
 import { useBranch } from "@/context/BranchContext";
 import {
   fetchBranchDeleteSummary,
@@ -14,7 +15,7 @@ import {
   getAppSetting,
   setAppSetting,
 } from "@/services/admin";
-import { listViewerUsers, deleteViewerUser, type ViewerUser } from "@/services/viewerUsers";
+import { listViewerUsers, deleteViewerUser, updateViewerUser, VIEWER_PAGES, type ViewerUser } from "@/services/viewerUsers";
 import CreateViewerModal from "@/components/security/CreateViewerModal";
 
 type UserRow = Awaited<ReturnType<typeof fetchSecurityRows>>[number];
@@ -55,6 +56,14 @@ export default function Security() {
   const [viewerUsers, setViewerUsers] = useState<ViewerUser[]>([]);
   const [showCreateViewer, setShowCreateViewer] = useState(false);
   const [deletingViewer, setDeletingViewer] = useState<string | null>(null);
+  const [editingViewer, setEditingViewer] = useState<ViewerUser | null>(null);
+  const [editViewerForm, setEditViewerForm] = useState<{
+    display_name: string;
+    accessible_pages: string[];
+    accessible_branches: string[];
+    is_active: boolean;
+  } | null>(null);
+  const [savingViewer, setSavingViewer] = useState(false);
 
   // Pagination
   const PAGE_SIZE = 15;
@@ -87,6 +96,38 @@ export default function Security() {
       alert(err?.message || "Failed to delete viewer user");
     } finally {
       setDeletingViewer(null);
+    }
+  }
+
+  function handleEditViewer(v: ViewerUser) {
+    setEditingViewer(v);
+    setEditViewerForm({
+      display_name: v.display_name || "",
+      accessible_pages: [...(v.accessible_pages || [])],
+      accessible_branches: [...(v.accessible_branches || [])],
+      is_active: v.is_active,
+    });
+  }
+
+  async function handleSaveViewer() {
+    if (!editingViewer || !editViewerForm) return;
+    setSavingViewer(true);
+    try {
+      await updateViewerUser(editingViewer.id, editViewerForm);
+      setViewerUsers(prev => prev.map(v => v.id === editingViewer.id ? {
+        ...v,
+        display_name: editViewerForm.display_name,
+        accessible_pages: editViewerForm.accessible_pages,
+        accessible_branches: editViewerForm.accessible_branches,
+        is_active: editViewerForm.is_active,
+      } : v));
+      setEditingViewer(null);
+      setEditViewerForm(null);
+      alert("Viewer user updated successfully!");
+    } catch (err: any) {
+      alert(err?.message || "Failed to update viewer user");
+    } finally {
+      setSavingViewer(false);
     }
   }
 
@@ -783,13 +824,21 @@ export default function Security() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => void handleDeleteViewer(v.id, v.username)}
-                      disabled={deletingViewer === v.id}
-                      className="text-xs text-red-600 hover:text-red-700 font-medium disabled:opacity-50"
-                    >
-                      {deletingViewer === v.id ? "Deleting..." : "Delete"}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleEditViewer(v)}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => void handleDeleteViewer(v.id, v.username)}
+                        disabled={deletingViewer === v.id}
+                        className="text-xs text-red-600 hover:text-red-700 font-medium disabled:opacity-50"
+                      >
+                        {deletingViewer === v.id ? "Deleting..." : "Delete"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -911,6 +960,158 @@ export default function Security() {
             void loadViewerUsers();
           }}
         />
+      )}
+
+      {/* Edit Viewer User Modal */}
+      {editingViewer && editViewerForm && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <h3 className="font-bold text-slate-800 text-lg">Edit Viewer User: {editingViewer.username}</h3>
+              <button
+                onClick={() => {
+                  setEditingViewer(null);
+                  setEditViewerForm(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+              {/* Display Name */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                  Display Name
+                </label>
+                <input
+                  type="text"
+                  className="block w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  value={editViewerForm.display_name}
+                  onChange={(e) => setEditViewerForm(prev => prev ? { ...prev, display_name: e.target.value } : null)}
+                />
+              </div>
+
+              {/* Status */}
+              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border">
+                <span className="text-sm font-semibold text-slate-700">Account Active</span>
+                <input
+                  type="checkbox"
+                  className="w-4.5 h-4.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                  checked={editViewerForm.is_active}
+                  onChange={(e) => setEditViewerForm(prev => prev ? { ...prev, is_active: e.target.checked } : null)}
+                />
+              </div>
+
+              {/* Pages */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Accessible Pages
+                </label>
+                <div className="flex flex-wrap gap-3">
+                  {VIEWER_PAGES.map((page) => {
+                    const hasPage = editViewerForm.accessible_pages.includes(page);
+                    return (
+                      <label key={page} className="flex items-center gap-1.5 text-sm cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={hasPage}
+                          onChange={() => {
+                            setEditViewerForm(prev => {
+                              if (!prev) return null;
+                              const current = prev.accessible_pages;
+                              const updated = current.includes(page)
+                                ? current.filter((x) => x !== page)
+                                : [...current, page];
+                              return { ...prev, accessible_pages: updated };
+                            });
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        {page}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Branches */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                  <span>Accessible Branches ({editViewerForm.accessible_branches.length} selected)</span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditViewerForm(prev => prev ? { ...prev, accessible_branches: [...viewerBranchList] } : null)}
+                      className="text-[10px] text-blue-600 hover:underline font-semibold"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setEditViewerForm(prev => prev ? { ...prev, accessible_branches: [] } : null)}
+                      className="text-[10px] text-slate-500 hover:underline font-semibold"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                </label>
+                <div className="grid grid-cols-3 gap-2 border border-slate-200 rounded-lg p-3 max-h-40 overflow-y-auto bg-slate-50 text-xs">
+                  {viewerBranchList.map((branchCode) => {
+                    const hasBranch = editViewerForm.accessible_branches.includes(branchCode);
+                    return (
+                      <label key={branchCode} className="flex items-center gap-1.5 cursor-pointer select-none py-0.5">
+                        <input
+                          type="checkbox"
+                          checked={hasBranch}
+                          onChange={() => {
+                            setEditViewerForm(prev => {
+                              if (!prev) return null;
+                              const current = prev.accessible_branches;
+                              const updated = current.includes(branchCode)
+                                ? current.filter((x) => x !== branchCode)
+                                : [...current, branchCode];
+                              return { ...prev, accessible_branches: updated };
+                            });
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className={hasBranch ? "font-bold text-slate-900" : "text-slate-600"}>
+                          {branchCode}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 bg-slate-50">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingViewer(null);
+                  setEditViewerForm(null);
+                }}
+                disabled={savingViewer}
+                className="px-4 py-2 border rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-100 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveViewer}
+                disabled={savingViewer}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {savingViewer && <Loader2 className="w-4 h-4 animate-spin" />}
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
