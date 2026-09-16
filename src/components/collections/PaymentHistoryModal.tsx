@@ -64,12 +64,14 @@ export default function PaymentHistoryModal({ gr, canEdit, onClose, onUpdated }:
       return;
     }
 
-    // Max 2% TDS validation (only if TDS is entered)
+    // Max 2% TDS validation (based on received amount + ₹1 margin)
     if (tds > 0) {
-      const maxTds = Math.round(totalFreight * 0.02 * 100) / 100;
-      const currentTotalTds = collectedTds + tds;
-      if (currentTotalTds > maxTds) {
-        toast.error(`Total TDS exceeds 2% limit (Max ₹${maxTds.toLocaleString("en-IN")})`);
+      const maxTdsForInstallment = amt > 0
+        ? Math.round(((amt / 98) * 2 + 1) * 100) / 100
+        : Math.round(((totalFreight * 0.02 + 1) * 100) / 100);
+
+      if (tds > maxTdsForInstallment) {
+        toast.error(`TDS for this payment exceeds 2% limit (Max ₹${maxTdsForInstallment.toLocaleString("en-IN")})`);
         return;
       }
     }
@@ -228,6 +230,11 @@ export default function PaymentHistoryModal({ gr, canEdit, onClose, onUpdated }:
                     className="w-full pl-6 pr-3 py-1.5 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
+                {Number(receivedAmount) > 0 && (
+                  <div className="text-[10px] text-gray-500 mt-1 font-medium">
+                    Max limit (2% + ₹1 margin) for ₹{Number(receivedAmount).toLocaleString("en-IN")}: <span className="font-semibold text-slate-700">₹{(Math.round(((Number(receivedAmount) / 98) * 2 + 1) * 100) / 100).toLocaleString("en-IN")}</span>
+                  </div>
+                )}
               </div>
 
               <div>

@@ -170,7 +170,10 @@ export function useCollections() {
     const finalTds = e?.tds_amount !== undefined ? Number(e.tds_amount) : (r.tds_amount ?? 0);
     const finalPaymentDate = e?.payment_date ?? r.payment_date;
     const finalRefNo = e?.ref_no ?? r.ref_no;
-    const maxTds = Math.round((r.total_freight || 0) * 0.02 * 100) / 100;
+    const recAmt = finalAmount || 0;
+    const maxTds = recAmt > 0
+      ? Math.round(((recAmt / 98) * 2 + 1) * 100) / 100
+      : Math.round(((r.total_freight || 0) * 0.02 + 1) * 100) / 100;
 
     const errors: Partial<Record<keyof EditState, boolean>> = {};
     if (!finalPaymentMode) errors.payment_mode = true;
@@ -182,7 +185,7 @@ export function useCollections() {
     if (Object.keys(errors).length > 0) {
       setRowErrors(prev => ({ ...prev, [r.gr_no]: errors }));
       if (errors.tds_amount) {
-        toast.error(`TDS cannot exceed 2% of total freight (max ₹${maxTds.toLocaleString('en-IN')})`);
+        toast.error(`TDS cannot exceed 2% limit for this received amount (max ₹${maxTds.toLocaleString('en-IN')})`);
       } else {
         toast.error("Please fill in all required fields");
       }

@@ -48,7 +48,10 @@ export const CollectionRow = React.memo(function CollectionRow({
   rowClass,
   rowErrors
 }: CollectionRowProps) {
-
+  const currentRecAmt = e?.received_amount !== undefined ? (Number(e.received_amount) || 0) : (r.received_amount || 0);
+  const rowMaxTds = currentRecAmt > 0
+    ? Math.round(((currentRecAmt / 98) * 2 + 1) * 100) / 100
+    : Math.round(((r.total_freight || 0) * 0.02 + 1) * 100) / 100;
 
   return (
     <tr className={`${rowClass} transition-colors duration-150`}>
@@ -131,7 +134,7 @@ export const CollectionRow = React.memo(function CollectionRow({
             rowErrors?.tds_amount ? "border-red-500 bg-red-50" : "border-gray-300"
           }`}
           placeholder="0"
-          title={`Max TDS: ₹${Math.round((r.total_freight || 0) * 0.02).toLocaleString('en-IN')} (2%)`}
+          title={`Max 2% TDS: ₹${rowMaxTds.toLocaleString('en-IN')} (based on received amount)`}
           value={
             e?.tds_amount ??
             (r.tds_amount ? String(r.tds_amount) : "")
@@ -142,7 +145,7 @@ export const CollectionRow = React.memo(function CollectionRow({
         />
         {rowErrors?.tds_amount && (
           <div className="absolute top-full left-0 z-10 mt-0.5 w-36 rounded bg-red-600 px-1.5 py-1 text-[10px] text-white shadow-lg">
-            Max 2% (₹{Math.round((r.total_freight || 0) * 0.02).toLocaleString('en-IN')})
+            Max 2% (₹{rowMaxTds.toLocaleString('en-IN')})
           </div>
         )}
       </td>
