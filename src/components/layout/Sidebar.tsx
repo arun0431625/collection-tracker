@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { useBranch } from "../../context/BranchContext";
+import { useViewer } from "../../context/ViewerContext";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -20,6 +21,7 @@ type SidebarProps = {
 
 export default function Sidebar({ onLogout }: SidebarProps) {
   const { role, branch } = useBranch();
+  const { viewer, isViewer } = useViewer();
   const [collapsed, setCollapsed] = useState(false);
   const [subBranches, setSubBranches] = useState<{ branch_code: string; pending_count: number }[]>([]);
   const [showAllSubBranches, setShowAllSubBranches] = useState(false);
@@ -57,6 +59,10 @@ export default function Sidebar({ onLogout }: SidebarProps) {
             <div className="text-xs text-slate-400 mt-0.5">
               {role === "ADMIN" ? (
                 <span>Admin Panel</span>
+              ) : isViewer ? (
+                <span className="font-medium text-slate-300">
+                  Viewer: {viewer?.display_name || viewer?.username}
+                </span>
               ) : (
                 <div className="flex flex-col gap-0.5">
                   <span className="font-medium text-slate-300">

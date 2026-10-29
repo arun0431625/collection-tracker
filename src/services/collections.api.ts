@@ -78,6 +78,31 @@ export async function getSubBranchCodes(controllingBranch: string): Promise<stri
   return codes;
 }
 
+export async function getExpandedBranchCodes(branches: string[]): Promise<string[]> {
+  const upperBranches = branches.map((b) => b.trim().toUpperCase()).filter(Boolean);
+  if (upperBranches.length === 0) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from("branches")
+      .select("branch_code, mapped_to");
+
+    if (error || !data) return upperBranches;
+
+    const set = new Set<string>(upperBranches);
+    data.forEach((r) => {
+      const code = (r.branch_code || "").trim().toUpperCase();
+      const mapped = (r.mapped_to || "").trim().toUpperCase();
+      if (upperBranches.includes(mapped) && code) {
+        set.add(code);
+      }
+    });
+    return Array.from(set);
+  } catch {
+    return upperBranches;
+  }
+}
+
 export async function getSubBranchDetails(controllingBranch: string): Promise<{ branch_code: string; pending_count: number }[]> {
   const { data, error } = await supabase.rpc("get_sub_branch_codes", {
     p_controlling_branch: controllingBranch,
@@ -117,19 +142,25 @@ export async function fetchCollections({
 
   // Branch filter
   if (branch) {
-    const isExact = branch.startsWith("EXACT:");
-    const actualBranch = isExact ? branch.substring(6) : branch;
-
-    if (isExact) {
+    if (branch.startsWith("IN:")) {
+      const list = branch.substring(3).split(",").map((s) => s.trim()).filter(Boolean);
+      if (list.length === 0 || list.includes("__NONE__")) {
+        query = query.eq("branch_code", "__NONE__");
+      } else {
+        const expanded = await getExpandedBranchCodes(list);
+        query = query.in("branch_code", expanded);
+      }
+    } else if (branch.startsWith("EXACT:")) {
+      const actualBranch = branch.substring(6);
       query = query.eq("branch_code", actualBranch);
     } else {
-      // Get all sub-branches mapped to this controlling branch, then use .in()
-      const subCodes = await getSubBranchCodes(actualBranch);
-      if (subCodes.length === 0) {
-        // No sub-branches found — filter by the branch itself
-        query = query.eq("branch_code", actualBranch);
+      // Single branch selected (e.g. "PUNJABI BAGH")
+      // Expand mapped sub-branches so controlling branch includes all its mapped points
+      const expanded = await getExpandedBranchCodes([branch]);
+      if (expanded.length === 0) {
+        query = query.eq("branch_code", branch);
       } else {
-        query = query.in("branch_code", subCodes);
+        query = query.in("branch_code", expanded);
       }
     }
   }

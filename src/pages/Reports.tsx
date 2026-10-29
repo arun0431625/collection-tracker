@@ -225,8 +225,12 @@ async function fetchPartyOutstandingPage({
 
 export default function Reports() {
 const { branch, role } = useBranch();
-const { isViewer } = useViewer();
+const { isViewer, viewer } = useViewer();
+const allowedBranches = isViewer ? (viewer?.accessible_branches || []) : [];
 const isAdminOrViewer = role === "ADMIN" || isViewer;
+const branchParam = isViewer
+  ? (allowedBranches.length > 0 ? `IN:${allowedBranches.join(",")}` : "IN:__NONE__")
+  : (role === "ADMIN" ? null : branch);
 
 const [areaRows, setAreaRows] = useState<AreaRow[]>([]);
 
@@ -307,7 +311,10 @@ useEffect(() => {
   async function fetchReports() {
     setLoading(true);
 
-    const branchParam = isAdminOrViewer ? null : branch;
+    const allowedBranches = isViewer ? (viewer?.accessible_branches || []) : [];
+    const branchParam = isViewer
+      ? (allowedBranches.length > 0 ? `IN:${allowedBranches.join(",")}` : "IN:__NONE__")
+      : (role === "ADMIN" ? null : branch);
     const [resBranch, resArea, resAgeing] = await Promise.all([
       supabase.rpc("get_reports_branch_detailed", { p_from_date: fromDate, p_to_date: toDate, p_branch_code: branchParam }),
       supabase.rpc("get_reports_area", { p_from_date: fromDate, p_to_date: toDate, p_branch_code: branchParam }),
@@ -356,7 +363,7 @@ useEffect(() => {
 
       const s2: AgeingRow[] = (resAgeing.data || []).map((r: any) => ({
         month: `${fromDate} → ${toDate}`,
-        branch_code: branch!,
+        branch_code: branch || "ALL",
         bucket: r.bucket,
         balance: Number(r.balance),
       }));
@@ -389,7 +396,15 @@ useEffect(() => {
       .from("collections_lrs")
       .select("branch_code, area_manager, gr_date, total_freight, received_amount, tds_amount");
 
-    if (role !== "ADMIN") q = q.eq("branch_code", branch);
+    if (isViewer) {
+      if (allowedBranches.length > 0) {
+        q = q.in("branch_code", allowedBranches);
+      } else {
+        q = q.eq("branch_code", "__NONE__");
+      }
+    } else if (role !== "ADMIN" && branch) {
+      q = q.eq("branch_code", branch);
+    }
     q = q.gte("gr_date", fromDate).lte("gr_date", toDate);
 
     let allRows: any[] = [];
@@ -461,7 +476,7 @@ useEffect(() => {
 
     const s2: AgeingRow[] = Object.entries(bucketMap).map(([bucket, balance]) => ({
       month: `${fromDate} → ${toDate}`,
-      branch_code: branch!,
+      branch_code: branch || "ALL",
       bucket,
       balance,
     }));
@@ -490,18 +505,18 @@ useEffect(() => {
   }
 
   fetchReports();
-}, [branch, role, fromDate, toDate]);
+}, [branch, role, isViewer, isAdminOrViewer, viewer, fromDate, toDate]);
 
 // ================= PARTY FETCH =================
 useEffect(() => {
-  if (!partyOpen || !branch) return;
+  if (!partyOpen || (!branch && !isViewer)) return;
 
   async function fetchPartyOutstanding() {
     setPartyLoading(true);
 
     try {
       const result = await fetchPartyOutstandingPage({
-        branchCode: role === "ADMIN" ? null : branch,
+        branchCode: branchParam,
         fromDate,
         toDate,
         search: debouncedPartySearch,
@@ -518,14 +533,14 @@ useEffect(() => {
   }
 
   fetchPartyOutstanding();
-  }, [partyOpen, branch, debouncedPartySearch, fromDate, toDate, role, partySort, partyPage]);
+  }, [partyOpen, branch, isViewer, isAdminOrViewer, branchParam, debouncedPartySearch, fromDate, toDate, role, partySort, partyPage]);
   useEffect(() => {
     setBranchPage(1);
-  }, [fromDate, toDate, branch]);
+  }, [fromDate, toDate, branch, isViewer]);
 
   useEffect(() => {
     setPartyPage(1);
-  }, [debouncedPartySearch, fromDate, toDate, branch, partySort]);
+  }, [debouncedPartySearch, fromDate, toDate, branch, isViewer, partySort]);
 
 function sortData<T extends Record<string, any>>(
   data: T[],
@@ -1030,7 +1045,7 @@ return (
 
               try {
                 const allParty = await fetchAllPartyOutstandingRows({
-                  branchCode: role === "ADMIN" ? null : branch,
+                  branchCode: branchParam,
                   fromDate,
                   toDate,
                   search: debouncedPartySearch,

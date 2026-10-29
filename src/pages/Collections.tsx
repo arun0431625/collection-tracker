@@ -115,6 +115,7 @@ export default function Collections() {
           status: statusFilter,
           search: search,
           month: selectedMonth,
+          fy: selectedFy === "ALL" ? undefined : selectedFy,
           payMode: payModeFilter,
         });
         totalCount = result.totalCount;
@@ -432,9 +433,9 @@ export default function Collections() {
       <div className="flex items-center justify-between bg-white border rounded-md px-3 py-2 shadow-sm">
         <div className="flex items-center gap-5 text-sm leading-tight">
           <div className="flex flex-col text-gray-500 font-medium pr-3 border-r">
-            <span>DAYS</span>
-            <span>GRs</span>
-            <span>Amount</span>
+            <span className="font-semibold text-gray-700">AGING</span>
+            <span title="Only GRs with pending balance">Pending GRs</span>
+            <span>Balance</span>
           </div>
 
           {["0-30","30-90","90-180","180-365","365+"].map((bucket) => {

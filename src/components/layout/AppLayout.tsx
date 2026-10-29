@@ -2,13 +2,19 @@ import { Outlet, useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import { useBranch } from "@/context/BranchContext";
+import { useViewer } from "@/context/ViewerContext";
 
 export default function AppLayout() {
   const navigate = useNavigate();
   const { logout } = useBranch();
+  const { logout: viewerLogout, isViewer } = useViewer();
 
   async function handleLogout() {
-    await logout();
+    if (isViewer) {
+      await viewerLogout();
+    } else {
+      await logout();
+    }
     navigate("/login", { replace: true });
   }
 

@@ -41,9 +41,15 @@ export function useCollections() {
   const [selectedBranch, setSelectedBranch] = useSessionStorageState<string>("coll_branch", "");
   const [selectedFy, setSelectedFy] = useSessionStorageState<string>("coll_fy", "2026-27");
   
+  const allowedBranches = isViewer ? (viewer?.accessible_branches || []) : [];
+
   const effectiveBranch = isAdmin 
-    ? (selectedBranch || null) 
-    : (selectedBranch ? `EXACT:${selectedBranch}` : branch);
+    ? (
+        selectedBranch
+          ? selectedBranch
+          : (isViewer ? (allowedBranches.length > 0 ? `IN:${allowedBranches.join(",")}` : "IN:__NONE__") : null)
+      ) 
+    : (selectedBranch || branch);
   const [branchOptions, setBranchOptions] = useState<string[]>([]);
   const [monthOptions, setMonthOptions] = useState<{ value: string; label: string }[]>([]);
   const deferredSearch = useDeferredValue(search);
@@ -95,6 +101,14 @@ export function useCollections() {
     };
     fetchBranches();
   }, [role, branch, isViewer, viewer]);
+
+  useEffect(() => {
+    if (isViewer && allowedBranches.length > 0 && selectedBranch) {
+      if (!allowedBranches.includes(selectedBranch)) {
+        setSelectedBranch("");
+      }
+    }
+  }, [isViewer, allowedBranches, selectedBranch, setSelectedBranch]);
 
   useEffect(() => {
     setCurrentPage(1);

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useBranch } from "@/context/BranchContext";
+import { useViewer } from "@/context/ViewerContext";
 import { fetchAccessibleCollectionBranchCodes } from "@/services/collections.api";
 import {
   AreaChart,
@@ -208,6 +209,8 @@ function aggregateDailyRowsToTimeline(mode: TimelineMode, rows: TimelineRpcRow[]
 /* ---------------- Component ---------------- */
 export default function Dashboard() {
   const { branch, role } = useBranch();
+  const { isViewer, viewer } = useViewer();
+  const allowedBranches = isViewer ? (viewer?.accessible_branches || []) : [];
   const today = new Date();
 
   /* ================== GLOBAL KPI FILTER ================== */
@@ -244,6 +247,49 @@ export default function Dashboard() {
     setRange({ from, to });
   }
 
+  const [selectedTrendBranch, setSelectedTrendBranch] = useSessionStorageState<string>(
+    "dash_timeline_branch",
+    ""
+  );
+  const [trendBranchOptions, setTrendBranchOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (isViewer && viewer?.accessible_branches?.length) {
+      setTrendBranchOptions([...viewer.accessible_branches].sort());
+    } else if (role === "ADMIN") {
+      async function fetchTrendBranches() {
+        try {
+          const branches = await fetchAccessibleCollectionBranchCodes();
+          setTrendBranchOptions(branches);
+        } catch (error) {
+          console.error("Failed to load dashboard branch options", error);
+        }
+      }
+      fetchTrendBranches();
+    }
+  }, [role, isViewer, viewer]);
+
+  useEffect(() => {
+    if (isViewer && allowedBranches.length > 0 && selectedTrendBranch) {
+      if (!allowedBranches.includes(selectedTrendBranch)) {
+        setSelectedTrendBranch("");
+      }
+    }
+  }, [isViewer, allowedBranches, selectedTrendBranch, setSelectedTrendBranch]);
+
+  const effectiveDashboardBranch = useMemo(() => {
+    if (role === "ADMIN") {
+      return selectedTrendBranch || null;
+    }
+    if (isViewer) {
+      if (selectedTrendBranch) {
+        return selectedTrendBranch;
+      }
+      return allowedBranches.length > 0 ? `IN:${allowedBranches.join(",")}` : "IN:__NONE__";
+    }
+    return branch;
+  }, [role, isViewer, selectedTrendBranch, allowedBranches, branch]);
+
   // Fetch standard KPI
   useEffect(() => {
     if (!range) return;
@@ -251,11 +297,10 @@ export default function Dashboard() {
     async function fetchDashboardKpi() {
       setKpiLoading(true);
       try {
-        const branchParam = role !== "ADMIN" ? branch : null;
         const { data: kpiData } = await supabase.rpc("fn_dashboard_kpi", {
           p_from: range.from,
           p_to: range.to,
-          p_branch: branchParam,
+          p_branch: effectiveDashboardBranch,
         });
 
         if (kpiData && kpiData[0]) {
@@ -266,7 +311,7 @@ export default function Dashboard() {
       }
     }
     fetchDashboardKpi();
-  }, [range, branch, role]);
+  }, [range, effectiveDashboardBranch]);
 
   const balance = useMemo(() => kpi.total_freight - kpi.collected, [kpi]);
 
@@ -279,15 +324,9 @@ export default function Dashboard() {
     "dash_timeline_count",
     DEFAULT_TIMELINE_COUNT.day
   );
-  const [selectedTrendBranch, setSelectedTrendBranch] = useSessionStorageState<string>(
-    "dash_timeline_branch",
-    ""
-  );
   const [trendData, setTrendData] = useState<TrendRow[]>([]);
   const [trackerData, setTrackerData] = useState<BranchTrackerRow[]>([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
-  const [trendBranchOptions, setTrendBranchOptions] = useState<string[]>([]);
-  const effectiveTrendBranch = role === "ADMIN" ? selectedTrendBranch || null : branch;
 
   // Sorting and Pagination for Tracker
   const [trackerPage, setTrackerPage] = useState(1);
@@ -303,21 +342,6 @@ export default function Dashboard() {
   }, [timelineMode, timelineCount, setTimelineCount]);
 
   useEffect(() => {
-    if (role !== "ADMIN") return;
-
-    async function fetchTrendBranches() {
-      try {
-        const branches = await fetchAccessibleCollectionBranchCodes();
-        setTrendBranchOptions(branches);
-      } catch (error) {
-        console.error("Failed to load dashboard branch options", error);
-      }
-    }
-
-    fetchTrendBranches();
-  }, [role]);
-
-  useEffect(() => {
     async function fetchAnalytics() {
       setAnalyticsLoading(true);
       
@@ -326,7 +350,7 @@ export default function Dashboard() {
           supabase.rpc("get_dashboard_collection_timeline", {
             p_mode: timelineMode,
             p_points: timelineCount,
-            p_branch: effectiveTrendBranch,
+            p_branch: effectiveDashboardBranch,
           }),
           // Branch tracker is strictly for admins mapping all branches
           role === "ADMIN" ? supabase.rpc("get_branch_activity_monitor") : Promise.resolve({ data: [] }),
@@ -337,7 +361,7 @@ export default function Dashboard() {
         } else {
           const fallbackTrend = await supabase.rpc("get_dashboard_daily_trend", {
             p_days: getFallbackTimelineDays(timelineMode, timelineCount),
-            p_branch: effectiveTrendBranch,
+            p_branch: effectiveDashboardBranch,
           });
 
           if (!fallbackTrend.error && fallbackTrend.data) {
@@ -372,7 +396,7 @@ export default function Dashboard() {
     }
 
     fetchAnalytics();
-  }, [timelineMode, timelineCount, effectiveTrendBranch, role]);
+  }, [timelineMode, timelineCount, effectiveDashboardBranch, role]);
 
 
   const sortedTrackerData = useMemo(() => {
@@ -506,6 +530,24 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {(role === "ADMIN" || isViewer) && (
+            <div>
+              <div className="text-xs text-gray-500 mb-1 font-medium">Branch</div>
+              <select
+                value={selectedTrendBranch}
+                onChange={(e) => setSelectedTrendBranch(e.target.value)}
+                className="border rounded px-3 py-1 text-sm bg-gray-50 text-gray-700 outline-none min-w-40"
+              >
+                <option value="">All Branches</option>
+                {trendBranchOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <button
             onClick={applyRange}
             disabled={kpiLoading}
@@ -571,7 +613,7 @@ export default function Dashboard() {
               </select>
             </label>
 
-            {role === "ADMIN" && (
+            {(role === "ADMIN" || isViewer) && (
               <label className="flex flex-col gap-1 text-xs text-gray-500">
                 Branch
                 <select
